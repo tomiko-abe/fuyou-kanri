@@ -385,6 +385,8 @@
           </div>
           <div class="info-note" style="margin-top:0">このコードを他の端末の「設定 → クラウド同期 → コードを入力」に入力すると同じデータが見られます。</div>
         </div>
+        <button class="btn mt8" onclick="copySetupURL()" style="background:linear-gradient(135deg,#0EA5E9,#6366F1)">🔗 他の端末に同期URLを共有</button>
+        <div class="info-note mt8">↑ このURLを開くだけで他の端末も自動で同期設定されます</div>
         <button class="btn-ghost mt8" onclick="showCodeInput()">🔄 別の端末のコードに切り替え</button>
         <button class="btn-out" onclick="disconnectSync()">同期を解除</button>
       </div>
@@ -1096,6 +1098,19 @@ async function pushToCloud(){
   catch(e){console.error('push failed',e);}
 }
 
+function copySetupURL(){
+  if(!_syncCode){toast('まず同期を設定してください');return;}
+  const cfg=localStorage.getItem('fuyou_fb_config')||'';
+  if(!cfg){toast('Firebase設定が見つかりません');return;}
+  try{
+    const data=btoa(unescape(encodeURIComponent(JSON.stringify({c:cfg,s:_syncCode}))));
+    const url=`${location.origin}${location.pathname}#x=${data}`;
+    const fallback=()=>{const i=document.createElement('input');i.value=url;document.body.appendChild(i);i.select();document.execCommand('copy');document.body.removeChild(i);toast('同期URLをコピーしたよ！他の端末でこのURLを開いてね 🔗');};
+    if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>toast('同期URLをコピーしたよ！他の端末でこのURLを開いてね 🔗')).catch(fallback);}
+    else fallback();
+  }catch(e){toast('URLの生成に失敗しました');}
+}
+
 function copySyncCode(){
   if(!_syncCode) return;
   const fallback=()=>{const i=document.createElement('input');i.value=_syncCode;document.body.appendChild(i);i.select();document.execCommand('copy');document.body.removeChild(i);toast('コードをコピーしたよ 📋');};
@@ -1191,6 +1206,17 @@ function toast(msg){
 
 /* ── INIT ── */
 document.addEventListener('DOMContentLoaded',async()=>{
+  // 同期URLからの自動設定（#x=...）
+  const hash=location.hash;
+  if(hash.startsWith('#x=')){
+    try{
+      const data=JSON.parse(decodeURIComponent(escape(atob(hash.slice(3)))));
+      if(data.c) localStorage.setItem('fuyou_fb_config',data.c);
+      if(data.s) localStorage.setItem(SYNC_KEY,data.s);
+      history.replaceState(null,'',location.pathname);
+      toast('同期設定を自動で読み込んだよ ✓');
+    }catch(e){console.warn('setup URL parse failed',e);}
+  }
   renderHome();
   // Firebase + 同期コードを自動復元
   const savedCfg=localStorage.getItem('fuyou_fb_config');
