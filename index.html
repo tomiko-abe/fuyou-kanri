@@ -293,7 +293,12 @@
           <div class="fg"><label>📝 バイト名（手入力）</label><input type="text" id="in-manual-name" placeholder="例：単発バイト" maxlength="30" oninput="calcPreview()"></div>
           <div class="fg"><label>💴 時給（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="in-manual-wage" inputmode="numeric" placeholder="1100" min="1" oninput="calcPreview()"></div></div>
         </div>
-        <div class="fg"><label>📆 日付</label><input type="date" id="in-date"></div>
+        <div class="fg"><label>📆 日付</label><input type="date" id="in-date" oninput="calcPreview();updatePayMonthNote()"></div>
+        <div class="fg">
+          <label>💴 支払い月</label>
+          <div class="ttype-row"><button class="btn-sm on" id="pm-same" onclick="setPM('same')">当月払い</button><button class="btn-sm" id="pm-next" onclick="setPM('next')">翌月払い</button></div>
+          <div class="info-note mt8" id="paymonth-note" style="display:none"></div>
+        </div>
         <div class="fg"><label>⏱️ 勤務時間</label><div class="time-row"><input type="time" id="in-start" oninput="calcPreview()"><input type="time" id="in-end" oninput="calcPreview()"></div></div>
         <div class="fg"><label>☕ 休憩（分）</label><input type="number" id="in-break" inputmode="numeric" placeholder="0" min="0" oninput="calcPreview()"></div>
         <div class="fg" id="transport-fg"><label>🚃 交通費（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="in-transport" inputmode="numeric" placeholder="0" min="0" oninput="calcPreview()"></div><div class="info-note" id="transport-note"></div></div>
@@ -411,9 +416,12 @@
       <div class="job-edit-area hidden" id="job-form">
         <div class="fg"><label>バイト名</label><input type="text" id="jf-name" placeholder="例：〇〇スーパー" maxlength="20"></div>
         <div class="fg"><label>時給（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="jf-wage" inputmode="numeric" placeholder="1100" min="1"></div></div>
-        <div class="fg" style="margin-bottom:0"><label>交通費タイプ</label>
+        <div class="fg"><label>交通費タイプ</label>
           <div class="ttype-row"><button class="btn-sm on" id="tt-fixed" onclick="setTT('fixed')">固定</button><button class="btn-sm" id="tt-manual" onclick="setTT('manual')">手入力</button><button class="btn-sm" id="tt-none" onclick="setTT('none')">支給なし</button></div>
           <div class="fg mt8 hidden" id="jf-fixed-fg"><label>固定交通費（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="jf-transport" inputmode="numeric" placeholder="500" min="0"></div></div>
+        </div>
+        <div class="fg" style="margin-bottom:0"><label>💴 支払い月タイプ</label>
+          <div class="ttype-row"><button class="btn-sm on" id="pt-same" onclick="setPT('same')">当月払い</button><button class="btn-sm" id="pt-next" onclick="setPT('next')">翌月払い</button></div>
         </div>
         <button class="btn mt8" onclick="saveJob()" style="font-size:13px;padding:11px">登録する</button>
       </div>
@@ -536,13 +544,14 @@ function save(){
 }
 
 /* ── COMPUTED ── */
-function yrRecs(){return store.records.filter(r=>r.date.startsWith(String(store.settings.year)))}
+function recPayMonth(r){return r.payMonth||r.date.slice(0,7);}
+function yrRecs(){const yr=String(store.settings.year);return store.records.filter(r=>recPayMonth(r).startsWith(yr));}
 function totalFuyou(){return yrRecs().reduce((s,r)=>s+(r.fuyouAmount||r.amount||0),0)}
 function remaining(){return Math.max(0,store.settings.limit-totalFuyou())}
 function thisMonthFuyou(){
   const now=new Date();
   const pfx=`${now.getFullYear()}-${pad(now.getMonth()+1)}`;
-  return yrRecs().filter(r=>r.date.startsWith(pfx)).reduce((s,r)=>s+(r.fuyouAmount||r.amount||0),0);
+  return yrRecs().filter(r=>recPayMonth(r)===pfx).reduce((s,r)=>s+(r.fuyouAmount||r.amount||0),0);
 }
 function remMonths(){
   const now=new Date(),yr=store.settings.year;
@@ -689,6 +698,7 @@ function onJobChange(){
   }
   mf.classList.add('hidden');
   if(!job){calcPreview();return;}
+  setPM(job.payType||'same');
   if(job.transportType==='none'){tfg.classList.add('hidden');tin.value='0';tn.textContent='';}
   else if(job.transportType==='fixed'){tfg.classList.remove('hidden');tin.value=job.transportFixed||0;tin.readOnly=true;tin.style.opacity='.6';tn.textContent=`固定交通費 ¥${(job.transportFixed||0).toLocaleString()}（自動入力）`;}
   else{tfg.classList.remove('hidden');tin.readOnly=false;tin.style.opacity='1';tn.textContent='勤務ごとに金額を入力してください';}
@@ -742,7 +752,8 @@ function submitAdd(){
   const hw=isManual?parseInt(document.getElementById('in-manual-wage').value):job.hourlyWage;
   const jname=isManual?document.getElementById('in-manual-name').value.trim():job.name;
   const wage=Math.floor(hw*wmin/60);
-  store.records.push({id:uid(),date:d,jobId:isManual?'__manual__':job.id,jobName:jname,startTime:s,endTime:e,breakMinutes:brk,hourlyWage:hw,workMinutes:wmin,wage,transport:trp,total:wage+trp,fuyouAmount:wage,createdAt:new Date().toISOString()});
+  const payMonth=calcPayMonth(d,curPM);
+  store.records.push({id:uid(),date:d,payMonth,jobId:isManual?'__manual__':job.id,jobName:jname,startTime:s,endTime:e,breakMinutes:brk,hourlyWage:hw,workMinutes:wmin,wage,transport:trp,total:wage+trp,fuyouAmount:wage,createdAt:new Date().toISOString()});
   save();toast('勤務を追加したよ ✓ 💛');nav('home');
 }
 
@@ -825,7 +836,7 @@ function renderHistory(){
   const recs=yrRecs().sort((a,b)=>b.date.localeCompare(a.date));
   if(!recs.length){el.innerHTML=`<div class="empty"><div class="ee">📭</div><p>まだ収入記録がないよ！</p></div>`;return;}
   const groups={};
-  recs.forEach(r=>{const k=r.date.slice(0,7);(groups[k]=groups[k]||[]).push(r);});
+  recs.forEach(r=>{const k=recPayMonth(r);(groups[k]=groups[k]||[]).push(r);});
   let html=`<div class="yr-total">年間扶養カウント：<strong>${fmt(totalFuyou())}</strong></div>`;
   Object.keys(groups).sort((a,b)=>b.localeCompare(a)).forEach(k=>{
     const mo=parseInt(k.split('-')[1]);
@@ -834,7 +845,8 @@ function renderHistory(){
     html+=`<div class="mgroup"><div class="mhdr"><span class="mlabel">${mo}月</span><span class="mtotal">${fmt(mT)}（扶 ${fmt(mF)}）</span></div>`;
     groups[k].forEach(r=>{
       const sub=r.workMinutes?`${r.startTime}–${r.endTime} ${Math.floor(r.workMinutes/60)}h${r.workMinutes%60}m`:fmtDate(r.date);
-      const badge=r.isMonthly?'<span class="mbadge">月次</span>':'';
+      const isNextMonth=r.payMonth&&r.payMonth!==r.date.slice(0,7);
+      const badge=r.isMonthly?'<span class="mbadge">月次</span>':isNextMonth?'<span class="mbadge" style="background:#E0E7FF;color:#3730A3">翌月払</span>':'';
       html+=`<div class="rec"><div class="rdot"></div><div class="rinfo"><div class="rmemo">${esc(r.jobName||r.memo||'収入')}${badge}</div><div class="rdate">${fmtDate(r.date)} ${sub}</div></div><div style="display:flex;align-items:center"><div><div class="ramt">¥${(r.total||r.amount||0).toLocaleString()}</div><div style="font-size:10px;color:var(--muted);text-align:right">扶 ¥${(r.fuyouAmount||r.amount||0).toLocaleString()}</div></div><button class="act-btn edit-btn" onclick="openEdit('${r.id}')">✏️</button><button class="act-btn del-btn" onclick="delRec('${r.id}')">×</button></div></div>`;
     });
     html+='</div>';
@@ -910,6 +922,45 @@ function overlayClick(e){if(e.target.id==='edit-overlay') closeEdit();}
 
 /* ── SETTINGS ── */
 let curTT='fixed';
+let curPT='same'; // バイト登録フォームの支払い月タイプ
+let curPM='same'; // 追加フォームの支払い月タイプ
+
+function setPT(t){
+  curPT=t;
+  ['same','next'].forEach(v=>document.getElementById('pt-'+v)?.classList.toggle('on',v===t));
+}
+
+function setPM(t){
+  curPM=t;
+  ['same','next'].forEach(v=>document.getElementById('pm-'+v)?.classList.toggle('on',v===t));
+  updatePayMonthNote();
+}
+
+function updatePayMonthNote(){
+  const d=document.getElementById('in-date')?.value;
+  const note=document.getElementById('paymonth-note');
+  if(!note) return;
+  if(!d){note.style.display='none';return;}
+  const dt=new Date(d+'T00:00:00');
+  let label;
+  if(curPM==='next'){
+    const pm=new Date(dt.getFullYear(),dt.getMonth()+1,1);
+    label=`📅 ${pm.getFullYear()}年${pm.getMonth()+1}月払い（翌月）`;
+  } else {
+    label=`📅 ${dt.getFullYear()}年${dt.getMonth()+1}月払い（当月）`;
+  }
+  note.textContent=label;
+  note.style.display='block';
+}
+
+function calcPayMonth(dateStr, pmType){
+  const dt=new Date(dateStr+'T00:00:00');
+  if(pmType==='next'){
+    const pm=new Date(dt.getFullYear(),dt.getMonth()+1,1);
+    return `${pm.getFullYear()}-${pad(pm.getMonth()+1)}`;
+  }
+  return dateStr.slice(0,7);
+}
 function renderSettings(){
   const{limit,year}=store.settings;
   document.getElementById('cfg-limit').value=limit;
@@ -940,6 +991,12 @@ function renderJobList(){
         </div>
         <div class="fg mt8 ${j.transportType!=='fixed'?'hidden':''}" id="je-fixed-fg-${j.id}"><label>固定交通費（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="je-transport-${j.id}" inputmode="numeric" value="${j.transportFixed||0}" min="0"></div></div>
       </div>
+      <div class="fg" style="margin-bottom:8px"><label>支払い月タイプ</label>
+        <div class="ttype-row">
+          <button class="btn-sm ${(j.payType||'same')==='same'?'on':''}" id="jept-same-${j.id}" onclick="setJEPT('${j.id}','same')">当月払い</button>
+          <button class="btn-sm ${j.payType==='next'?'on':''}" id="jept-next-${j.id}" onclick="setJEPT('${j.id}','next')">翌月払い</button>
+        </div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
         <button class="btn" style="font-size:13px;padding:11px" onclick="saveJobEdit('${j.id}')">💾 保存</button>
         <button class="btn-ghost" style="font-size:13px" onclick="cancelJobEdit('${j.id}')">キャンセル</button>
@@ -968,6 +1025,11 @@ function setJETT(id,t){
   });
   document.getElementById(`je-fixed-fg-${id}`)?.classList.toggle('hidden',t!=='fixed');
 }
+let _jeEditPT={};
+function setJEPT(id,t){
+  _jeEditPT[id]=t;
+  ['same','next'].forEach(v=>{document.getElementById(`jept-${v}-${id}`)?.classList.toggle('on',v===t);});
+}
 function saveJobEdit(id){
   const idx=store.jobs.findIndex(j=>j.id===id);
   if(idx===-1) return;
@@ -975,9 +1037,10 @@ function saveJobEdit(id){
   const wage=parseInt(document.getElementById(`je-wage-${id}`).value)||0;
   const tt=_jeEditTT[id]||store.jobs[idx].transportType;
   const tf=parseInt(document.getElementById(`je-transport-${id}`)?.value)||0;
+  const pt=_jeEditPT[id]||store.jobs[idx].payType||'same';
   if(!name){toast('バイト名を入力してください');return;}
   if(!wage){toast('時給を入力してください');return;}
-  store.jobs[idx]={...store.jobs[idx],name,hourlyWage:wage,transportType:tt,transportFixed:tt==='fixed'?tf:0};
+  store.jobs[idx]={...store.jobs[idx],name,hourlyWage:wage,transportType:tt,transportFixed:tt==='fixed'?tf:0,payType:pt};
   save();renderJobList();refreshJobDropdown();toast(`「${name}」を更新したよ ✓`);
 }
 
@@ -985,7 +1048,7 @@ function toggleJobForm(){
   const el=document.getElementById('job-form');
   const showing=!el.classList.contains('hidden');
   el.classList.toggle('hidden',showing);
-  if(!showing){['jf-name','jf-wage','jf-transport'].forEach(id=>document.getElementById(id).value='');setTT('fixed');}
+  if(!showing){['jf-name','jf-wage','jf-transport'].forEach(id=>document.getElementById(id).value='');setTT('fixed');setPT('same');}
 }
 
 function setTT(t){
@@ -1000,7 +1063,7 @@ function saveJob(){
   const tfixed=parseInt(document.getElementById('jf-transport').value)||0;
   if(!name){toast('バイト名を入力してください');return;}
   if(!wage||wage<1){toast('時給を入力してください');return;}
-  store.jobs.push({id:uid(),name,hourlyWage:wage,transportType:curTT,transportFixed:curTT==='fixed'?tfixed:0});
+  store.jobs.push({id:uid(),name,hourlyWage:wage,transportType:curTT,transportFixed:curTT==='fixed'?tfixed:0,payType:curPT});
   save();toggleJobForm();renderJobList();
   // すぐにAddページのドロップダウンも更新
   if(document.getElementById('shift-form-inner')) refreshJobDropdown();
