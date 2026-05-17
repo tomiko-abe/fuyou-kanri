@@ -385,8 +385,12 @@
           </div>
           <div class="info-note" style="margin-top:0">このコードを他の端末の「設定 → クラウド同期 → コードを入力」に入力すると同じデータが見られます。</div>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px">
+          <button class="btn" onclick="manualPush()" style="background:linear-gradient(135deg,#059669,#0EA5E9);font-size:13px;padding:11px">📤 今すぐ送信</button>
+          <button class="btn" onclick="manualPull()" style="background:linear-gradient(135deg,#7C3AED,#EC4899);font-size:13px;padding:11px">📥 今すぐ受信</button>
+        </div>
+        <div class="info-note mt8">送信＝このデータをクラウドへ　受信＝クラウドのデータをここへ</div>
         <button class="btn mt8" onclick="copySetupURL()" style="background:linear-gradient(135deg,#0EA5E9,#6366F1)">🔗 他の端末に同期URLを共有</button>
-        <div class="info-note mt8">↑ このURLを開くだけで他の端末も自動で同期設定されます</div>
         <button class="btn-ghost mt8" onclick="showCodeInput()">🔄 別の端末のコードに切り替え</button>
         <button class="btn-out" onclick="disconnectSync()">同期を解除</button>
       </div>
@@ -1096,6 +1100,32 @@ async function pushToCloud(){
   if(!_fbDB||!_syncCode) return;
   try{await _fbDB.collection('sync').doc(_syncCode).set(store);}
   catch(e){console.error('push failed',e);}
+}
+
+async function manualPush(){
+  if(!_fbDB||!_syncCode){toast('同期が設定されていません');return;}
+  toast('送信中...');
+  try{
+    await _fbDB.collection('sync').doc(_syncCode).set(store);
+    toast('☁️ クラウドに送信したよ！');
+  }catch(e){toast('送信失敗: '+e.message);}
+}
+
+async function manualPull(){
+  if(!_fbDB||!_syncCode){toast('同期が設定されていません');return;}
+  toast('受信中...');
+  try{
+    const snap=await _fbDB.collection('sync').doc(_syncCode).get();
+    if(snap.exists){
+      const d=snap.data();
+      if(d&&Array.isArray(d.records)){
+        store={settings:d.settings||store.settings,jobs:d.jobs||[],records:d.records};
+        localStorage.setItem(KEY,JSON.stringify(store));
+        renderCurrentPage();
+        toast('📥 クラウドから受信したよ！');
+      } else {toast('クラウドにデータがありません');}
+    } else {toast('クラウドにデータがありません');}
+  }catch(e){toast('受信失敗: '+e.message);}
 }
 
 function copySetupURL(){
