@@ -158,6 +158,7 @@
     .cal-day.w-safe{background:#D1FAE5}.cal-day.w-safe .cdn{color:#065F46}.cal-day.w-safe .cam{color:#059669}
     .cal-day.w-cau{background:#FEF3C7}.cal-day.w-cau .cdn{color:#78350F}.cal-day.w-cau .cam{color:#D97706}
     .cal-day.w-dng{background:#FEE2E2}.cal-day.w-dng .cdn{color:#7F1D1D}.cal-day.w-dng .cam{color:#DC2626}
+    .cal-day.w-plan{background:#E0E7FF;border:1.5px dashed #818CF8}.cal-day.w-plan .cdn{color:#3730A3}.cal-day.w-plan .cam{color:#4F46E5}
     .cal-legend{display:flex;gap:10px;justify-content:center;margin-bottom:10px;flex-wrap:wrap}
     .leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);font-weight:700}
     .leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
@@ -285,10 +286,13 @@
     <button class="add-tab" id="tab-monthly" onclick="switchAddTab('monthly')">📅 月次一括</button>
   </div>
   <div id="shift-form-area">
-    <div id="no-job-warn" class="hidden"><div class="alert alert-c">⚠️ バイトが登録されていません。「設定」タブで先に登録してください。</div></div>
     <div id="shift-form-inner">
       <div class="card">
-        <div class="fg"><label>🏷️ バイト名</label><select id="in-job" onchange="onJobChange()"><option value="">-- バイトを選択 --</option></select></div>
+        <div class="fg"><label>🏷️ バイト選択</label><select id="in-job" onchange="onJobChange()"><option value="">-- バイトを選択 --</option></select></div>
+        <div id="manual-fields" class="hidden">
+          <div class="fg"><label>📝 バイト名（手入力）</label><input type="text" id="in-manual-name" placeholder="例：単発バイト" maxlength="30" oninput="calcPreview()"></div>
+          <div class="fg"><label>💴 時給（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="in-manual-wage" inputmode="numeric" placeholder="1100" min="1" oninput="calcPreview()"></div></div>
+        </div>
         <div class="fg"><label>📆 日付</label><input type="date" id="in-date"></div>
         <div class="fg"><label>⏱️ 勤務時間</label><div class="time-row"><input type="time" id="in-start" oninput="calcPreview()"><input type="time" id="in-end" oninput="calcPreview()"></div></div>
         <div class="fg"><label>☕ 休憩（分）</label><input type="number" id="in-break" inputmode="numeric" placeholder="0" min="0" oninput="calcPreview()"></div>
@@ -339,9 +343,10 @@
     <button class="cal-nav-btn" onclick="calMove(1)">›</button>
   </div>
   <div class="cal-legend">
-    <div class="leg-item"><div class="leg-dot" style="background:#10B981"></div>安全(&lt;70%)</div>
-    <div class="leg-item"><div class="leg-dot" style="background:#F59E0B"></div>注意(70–89%)</div>
-    <div class="leg-item"><div class="leg-dot" style="background:#EF4444"></div>扶養接近(≥90%)</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#10B981"></div>完了・安全</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#F59E0B"></div>完了・注意</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#EF4444"></div>完了・接近</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#818CF8;border:1.5px dashed #818CF8"></div>予定</div>
   </div>
   <div class="cal-grid">
     <div class="cal-dow"><div class="cal-dow-cell">日</div><div class="cal-dow-cell">月</div><div class="cal-dow-cell">火</div><div class="cal-dow-cell">水</div><div class="cal-dow-cell">木</div><div class="cal-dow-cell">金</div><div class="cal-dow-cell">土</div></div>
@@ -652,18 +657,15 @@ function renderAdd(){
 
 function refreshJobDropdown(){
   const jobs=store.jobs;
-  const noWarn=document.getElementById('no-job-warn');
-  const inner=document.getElementById('shift-form-inner');
-  if(!jobs.length){
-    noWarn.classList.remove('hidden');inner.classList.add('hidden');return;
-  }
-  noWarn.classList.add('hidden');inner.classList.remove('hidden');
   const sel=document.getElementById('in-job');
+  if(!sel) return;
   const cur=sel.value;
   sel.innerHTML='<option value="">-- バイトを選択 --</option>'+
-    jobs.map(j=>`<option value="${j.id}">${esc(j.name)} (¥${j.hourlyWage.toLocaleString()}/時)</option>`).join('');
-  if(cur && jobs.find(j=>j.id===cur)) sel.value=cur;
+    jobs.map(j=>`<option value="${j.id}">${esc(j.name)} (¥${j.hourlyWage.toLocaleString()}/時)</option>`).join('')+
+    '<option value="__manual__">✏️ 手入力（単発・登録なし）</option>';
+  if(cur && (cur==='__manual__'||jobs.find(j=>j.id===cur))) sel.value=cur;
   else if(jobs.length===1){sel.value=jobs[0].id;onJobChange();}
+  onJobChange();
 }
 
 function onJobChange(){
@@ -672,6 +674,14 @@ function onJobChange(){
   const tfg=document.getElementById('transport-fg');
   const tn=document.getElementById('transport-note');
   const tin=document.getElementById('in-transport');
+  const mf=document.getElementById('manual-fields');
+  // 手入力モード
+  if(id==='__manual__'){
+    mf.classList.remove('hidden');
+    tfg.classList.remove('hidden');tin.readOnly=false;tin.style.opacity='1';tn.textContent='';
+    calcPreview();return;
+  }
+  mf.classList.add('hidden');
   if(!job){calcPreview();return;}
   if(job.transportType==='none'){tfg.classList.add('hidden');tin.value='0';tn.textContent='';}
   else if(job.transportType==='fixed'){tfg.classList.remove('hidden');tin.value=job.transportFixed||0;tin.readOnly=true;tin.style.opacity='.6';tn.textContent=`固定交通費 ¥${(job.transportFixed||0).toLocaleString()}（自動入力）`;}
@@ -682,15 +692,18 @@ function onJobChange(){
 function calcPreview(){
   const id=document.getElementById('in-job').value;
   const job=store.jobs.find(j=>j.id===id);
+  const isManual=id==='__manual__';
+  const manualWage=parseInt(document.getElementById('in-manual-wage')?.value)||0;
+  const hourlyWage=isManual?manualWage:job?.hourlyWage;
   const s=document.getElementById('in-start').value,e=document.getElementById('in-end').value;
   const brk=parseInt(document.getElementById('in-break').value)||0;
   const trp=parseInt(document.getElementById('in-transport').value)||0;
   const pc=document.getElementById('preview-card');
-  if(!job||!s||!e){pc.classList.add('hidden');return;}
+  if(!hourlyWage||!s||!e){pc.classList.add('hidden');return;}
   const[sh,sm]=s.split(':').map(Number),[eh,em]=e.split(':').map(Number);
   const wmin=(eh*60+em)-(sh*60+sm)-brk;
   if(wmin<=0){pc.classList.add('hidden');return;}
-  const wage=Math.floor(job.hourlyWage*wmin/60),total=wage+trp;
+  const wage=Math.floor(hourlyWage*wmin/60),total=wage+trp;
   pc.classList.remove('hidden');
   document.getElementById('pv-time').textContent=`${Math.floor(wmin/60)}時間${pad(wmin%60)}分`;
   document.getElementById('pv-wage').textContent=fmt(wage);
@@ -702,19 +715,28 @@ function calcPreview(){
 
 function submitAdd(){
   const id=document.getElementById('in-job').value;
+  const isManual=id==='__manual__';
   const job=store.jobs.find(j=>j.id===id);
+  if(!id){toast('バイトを選択してください');return;}
+  if(isManual){
+    const mname=document.getElementById('in-manual-name').value.trim();
+    const mwage=parseInt(document.getElementById('in-manual-wage').value)||0;
+    if(!mname){toast('バイト名を入力してください');return;}
+    if(!mwage){toast('時給を入力してください');return;}
+  } else if(!job){toast('バイトを選択してください');return;}
   const d=document.getElementById('in-date').value;
   const s=document.getElementById('in-start').value,e=document.getElementById('in-end').value;
   const brk=parseInt(document.getElementById('in-break').value)||0;
   const trp=parseInt(document.getElementById('in-transport').value)||0;
-  if(!job){toast('バイトを選択してください');return;}
   if(!d){toast('日付を入力してください');return;}
   if(!s||!e){toast('勤務時間を入力してください');return;}
   const[sh,sm]=s.split(':').map(Number),[eh,em]=e.split(':').map(Number);
   const wmin=(eh*60+em)-(sh*60+sm)-brk;
   if(wmin<=0){toast('勤務時間が0以下です');return;}
-  const wage=Math.floor(job.hourlyWage*wmin/60);
-  store.records.push({id:uid(),date:d,jobId:job.id,jobName:job.name,startTime:s,endTime:e,breakMinutes:brk,hourlyWage:job.hourlyWage,workMinutes:wmin,wage,transport:trp,total:wage+trp,fuyouAmount:wage,createdAt:new Date().toISOString()});
+  const hw=isManual?parseInt(document.getElementById('in-manual-wage').value):job.hourlyWage;
+  const jname=isManual?document.getElementById('in-manual-name').value.trim():job.name;
+  const wage=Math.floor(hw*wmin/60);
+  store.records.push({id:uid(),date:d,jobId:isManual?'__manual__':job.id,jobName:jname,startTime:s,endTime:e,breakMinutes:brk,hourlyWage:hw,workMinutes:wmin,wage,transport:trp,total:wage+trp,fuyouAmount:wage,createdAt:new Date().toISOString()});
   save();toast('勤務を追加したよ ✓ 💛');nav('home');
 }
 
@@ -765,10 +787,11 @@ function renderCalendar(){
     if(dfw===0) cls+=' sun'; if(dfw===6) cls+=' sat';
     let amt='';
     if(dayMap[iso]!==undefined){
-      const r=cumMap[iso]/lim;
-      cls+=r>=.9?' w-dng':r>=.7?' w-cau':' w-safe';
       const v=dayMap[iso];
-      amt=`<span class="cam">${v>=10000?`${(v/10000).toFixed(1)}万`:`${Math.round(v/1000)}k`}</span>`;
+      const isPast=iso<=today;
+      if(isPast){const r=cumMap[iso]/lim;cls+=r>=.9?' w-dng':r>=.7?' w-cau':' w-safe';}
+      else{cls+=' w-plan';}
+      amt=`<span class="cam">${v>=10000?`${(v/10000).toFixed(1)}万`:v>=1000?`${Math.round(v/1000)}千`:`${v}円`}</span>`;
     }
     cells+=`<div class="${cls}"><span class="cdn">${day}</span>${amt}</div>`;
   }
@@ -894,7 +917,62 @@ function renderJobList(){
   const el=document.getElementById('job-list');
   if(!store.jobs.length){el.innerHTML='<div class="empty" style="padding:14px"><p>まだ登録されてないよ！</p></div>';return;}
   const ttL={fixed:'固定交通費',manual:'手入力',none:'交通費なし'};
-  el.innerHTML=store.jobs.map(j=>`<div class="job-item"><div class="job-info"><div class="job-name">${esc(j.name)}</div><div class="job-meta">¥${j.hourlyWage.toLocaleString()}/時　${ttL[j.transportType]||''}${j.transportType==='fixed'?` ¥${(j.transportFixed||0).toLocaleString()}`:''}</div></div><button class="act-btn del-btn" onclick="delJob('${j.id}')">×</button></div>`).join('');
+  el.innerHTML=store.jobs.map(j=>`
+    <div class="job-item" id="ji-${j.id}">
+      <div class="job-info"><div class="job-name">${esc(j.name)}</div><div class="job-meta">¥${j.hourlyWage.toLocaleString()}/時　${ttL[j.transportType]||''}${j.transportType==='fixed'?` ¥${(j.transportFixed||0).toLocaleString()}`:''}</div></div>
+      <button class="act-btn edit-btn" onclick="openJobEdit('${j.id}')">✏️</button>
+      <button class="act-btn del-btn" onclick="delJob('${j.id}')">×</button>
+    </div>
+    <div class="job-edit-area hidden" id="je-${j.id}">
+      <div class="fg"><label>バイト名</label><input type="text" id="je-name-${j.id}" value="${esc(j.name)}" maxlength="20"></div>
+      <div class="fg"><label>時給（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="je-wage-${j.id}" inputmode="numeric" value="${j.hourlyWage}" min="1"></div></div>
+      <div class="fg" style="margin-bottom:8px"><label>交通費タイプ</label>
+        <div class="ttype-row">
+          <button class="btn-sm ${j.transportType==='fixed'?'on':''}" onclick="setJETT('${j.id}','fixed')">固定</button>
+          <button class="btn-sm ${j.transportType==='manual'?'on':''}" onclick="setJETT('${j.id}','manual')">手入力</button>
+          <button class="btn-sm ${j.transportType==='none'?'on':''}" onclick="setJETT('${j.id}','none')">支給なし</button>
+        </div>
+        <div class="fg mt8 ${j.transportType!=='fixed'?'hidden':''}" id="je-fixed-fg-${j.id}"><label>固定交通費（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="je-transport-${j.id}" inputmode="numeric" value="${j.transportFixed||0}" min="0"></div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+        <button class="btn" style="font-size:13px;padding:11px" onclick="saveJobEdit('${j.id}')">💾 保存</button>
+        <button class="btn-ghost" style="font-size:13px" onclick="cancelJobEdit('${j.id}')">キャンセル</button>
+      </div>
+    </div>`).join('');
+}
+
+// バイト編集（インライン）
+let _jeEditTT={};
+function openJobEdit(id){
+  // 他の編集フォームを閉じる
+  store.jobs.forEach(j=>{if(j.id!==id){document.getElementById('je-'+j.id)?.classList.add('hidden');document.getElementById('ji-'+j.id)?.classList.remove('hidden');}});
+  document.getElementById('ji-'+id).classList.add('hidden');
+  document.getElementById('je-'+id).classList.remove('hidden');
+  _jeEditTT[id]=store.jobs.find(j=>j.id===id)?.transportType||'fixed';
+}
+function cancelJobEdit(id){
+  document.getElementById('je-'+id).classList.add('hidden');
+  document.getElementById('ji-'+id).classList.remove('hidden');
+}
+function setJETT(id,t){
+  _jeEditTT[id]=t;
+  ['fixed','manual','none'].forEach(v=>{
+    const b=document.querySelector(`#je-${id} .btn-sm:nth-child(${v==='fixed'?1:v==='manual'?2:3})`);
+    if(b) b.classList.toggle('on',v===t);
+  });
+  document.getElementById(`je-fixed-fg-${id}`)?.classList.toggle('hidden',t!=='fixed');
+}
+function saveJobEdit(id){
+  const idx=store.jobs.findIndex(j=>j.id===id);
+  if(idx===-1) return;
+  const name=document.getElementById(`je-name-${id}`).value.trim();
+  const wage=parseInt(document.getElementById(`je-wage-${id}`).value)||0;
+  const tt=_jeEditTT[id]||store.jobs[idx].transportType;
+  const tf=parseInt(document.getElementById(`je-transport-${id}`)?.value)||0;
+  if(!name){toast('バイト名を入力してください');return;}
+  if(!wage){toast('時給を入力してください');return;}
+  store.jobs[idx]={...store.jobs[idx],name,hourlyWage:wage,transportType:tt,transportFixed:tt==='fixed'?tf:0};
+  save();renderJobList();refreshJobDropdown();toast(`「${name}」を更新したよ ✓`);
 }
 
 function toggleJobForm(){
