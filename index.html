@@ -555,7 +555,6 @@ function nav(page){
     const b=document.getElementById('nav-'+id);
     if(b) b.classList.toggle('active',id===page);
   });
-  document.getElementById('page-title').textContent=TITLES[page];
   curPage=page;
   window.scrollTo(0,0);
   if(page==='home')     renderHome();
@@ -621,7 +620,7 @@ function renderHome(){
   const recs=yrRecs().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
   const el=document.getElementById('recent-list');
   if(!recs.length){el.innerHTML='<div class="no-recent">まだ記録がないよ！「追加」タブから登録してね 💛</div>';return;}
-  el.innerHTML=recs.map(r=>`<div class="rec"><div class="rdot"></div><div class="rinfo"><div class="rmemo">${esc(r.jobName||r.memo||'収入')}${r.isMonthly?'<span class="mbadge">月次</span>':''}</div><div class="rdate">${fmtDate(r.date)}${r.startTime?` ${r.startTime}–${r.endTime}`:''}</div></div><div><div class="ramt">¥${(r.total||r.amount||0).toLocaleString()}</div><div style="font-size:10px;color:var(--muted);text-align:right">扶 ¥${(r.fuyouAmount||r.amount||0).toLocaleString()}</div></div></div>`).join('');
+  el.innerHTML=recs.map(r=>`<div class="rec"><div class="rdot"></div><div class="rinfo"><div class="rmemo">${esc(r.jobName||r.memo||'収入')}${r.isMonthly?'<span class="mbadge">月次</span>':''}</div><div class="rdate">${fmtDate(r.date)}${r.startTime?` ${r.startTime}–${r.endTime}`:''}</div></div><div style="display:flex;align-items:center;gap:4px"><div style="text-align:right"><div class="ramt">¥${(r.total||r.amount||0).toLocaleString()}</div><div style="font-size:10px;color:var(--muted)">扶 ¥${(r.fuyouAmount||r.amount||0).toLocaleString()}</div></div><button class="act-btn edit-btn" onclick="openEdit('${r.id}')">✏️</button><button class="act-btn del-btn" onclick="delRec('${r.id}')">×</button></div></div>`).join('');
   document.getElementById('yr-badge').textContent=`${store.settings.year}年 ▾`;
 }
 
