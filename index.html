@@ -242,7 +242,7 @@
 <body>
 <div id="app">
 <header class="hdr">
-  <h1>💛 フヨッコ 扶養管理</h1>
+  <h1>💛 フヨッコ 扶養管理 <span style="font-size:9px;font-weight:600;opacity:.7">v7</span></h1>
   <span class="yr-badge" id="yr-badge" onclick="nav('settings')">2026年 ▾</span>
 </header>
 <main>
@@ -313,6 +313,9 @@
         <div class="fg"><label>⏱️ 勤務時間</label><div class="time-row"><input type="time" id="in-start" oninput="calcPreview()"><input type="time" id="in-end" oninput="calcPreview()"></div></div>
         <div class="fg"><label>☕ 休憩（分）</label><input type="number" id="in-break" inputmode="numeric" placeholder="0" min="0" oninput="calcPreview()"></div>
         <div class="fg" id="transport-fg"><label>🚃 交通費（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="in-transport" inputmode="numeric" placeholder="0" min="0" oninput="calcPreview()"></div><div class="info-note" id="transport-note"></div></div>
+        <div class="fg" style="margin-bottom:0"><label>🎯 扶養カウント</label>
+          <div class="ttype-row"><button class="btn-sm on" id="acf-yes" onclick="setAddCF(true)">カウントする</button><button class="btn-sm" id="acf-no" onclick="setAddCF(false)">対象外</button></div>
+        </div>
       </div>
       <div class="preview-card hidden" id="preview-card">
         <div class="preview-title">✨ 自動計算結果</div>
@@ -334,7 +337,10 @@
       <div class="fg"><label>📅 年月</label><input type="month" id="in-month-ym"></div>
       <div class="fg"><label>🏷️ バイト名 / メモ（任意）</label><input type="text" id="in-month-name" placeholder="例：〇〇スーパー 1月分" maxlength="30"></div>
       <div class="fg"><label>💴 給与合計（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="in-month-wage" inputmode="numeric" placeholder="0" min="0" oninput="calcMonthlyPreview()"></div></div>
-      <div class="fg" style="margin-bottom:20px"><label>🚃 交通費合計（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="in-month-transport" inputmode="numeric" placeholder="0" min="0" oninput="calcMonthlyPreview()"></div><div class="info-note">💡 交通費は扶養カウントに含まれません</div></div>
+      <div class="fg"><label>🚃 交通費合計（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="in-month-transport" inputmode="numeric" placeholder="0" min="0" oninput="calcMonthlyPreview()"></div><div class="info-note">💡 交通費は扶養カウントに含まれません</div></div>
+      <div class="fg" style="margin-bottom:20px"><label>🎯 扶養カウント</label>
+        <div class="ttype-row"><button class="btn-sm on" id="mcf-yes" onclick="setMonCF(true)">カウントする</button><button class="btn-sm" id="mcf-no" onclick="setMonCF(false)">対象外</button></div>
+      </div>
       <button class="btn" onclick="submitMonthly()">✅ 追加する</button>
     </div>
     <div class="preview-card hidden" id="monthly-preview-card">
@@ -572,15 +578,18 @@ function save(){
 /* ── COMPUTED ── */
 const AVG3_LIMIT=108333; // 130万 ÷ 12（3ヶ月平均の上限・交通費込み）
 function recPayMonth(r){return r.payMonth||r.date.slice(0,7);}
-// 扶養カウント額：バイトの「扶養にカウントしない」設定を動的に反映
-function recFuyouAmt(r){
+// この記録が扶養にカウントされるか（記録自身の設定を最優先、なければバイト設定）
+function recCounted(r){
+  if(r.countFuyou===false) return false;
+  if(r.countFuyou===true) return true;
   if(!r.isMonthly && r.jobId && r.jobId!=='__manual__'){
     const job=store.jobs.find(j=>j.id===r.jobId);
-    if(job && job.countFuyou===false) return 0;
+    if(job && job.countFuyou===false) return false;
   }
-  if(r.countFuyou===false) return 0;
-  return r.fuyouAmount||r.amount||0;
+  return true;
 }
+// 扶養カウント額
+function recFuyouAmt(r){return recCounted(r)?(r.fuyouAmount||r.amount||0):0;}
 // 月収入（交通費込み・支払い月基準）— 3ヶ月平均用
 function monthIncome(ym){return store.records.filter(r=>recPayMonth(r)===ym).reduce((s,r)=>s+(r.total||r.amount||0),0);}
 // 年内の3ヶ月移動平均ウィンドウ
@@ -783,6 +792,7 @@ function renderAdd(){
   document.getElementById('in-month-wage').value='';
   document.getElementById('in-month-transport').value='';
   document.getElementById('monthly-preview-card').classList.add('hidden');
+  setAddCF(true);setMonCF(true);
 }
 
 function refreshJobDropdown(){
@@ -814,6 +824,7 @@ function onJobChange(){
   mf.classList.add('hidden');
   if(!job){calcPreview();return;}
   setPM(job.payType||'same');
+  setAddCF(job.countFuyou!==false); // バイトの設定を初期値に
   if(job.transportType==='none'){tfg.classList.add('hidden');tin.value='0';tn.textContent='';}
   else if(job.transportType==='fixed'){tfg.classList.remove('hidden');tin.value=job.transportFixed||0;tin.readOnly=true;tin.style.opacity='.6';tn.textContent=`固定交通費 ¥${(job.transportFixed||0).toLocaleString()}（自動入力）`;}
   else{tfg.classList.remove('hidden');tin.readOnly=false;tin.style.opacity='1';tn.textContent='勤務ごとに金額を入力してください';}
@@ -868,7 +879,7 @@ function submitAdd(){
   const jname=isManual?document.getElementById('in-manual-name').value.trim():job.name;
   const wage=Math.floor(hw*wmin/60);
   const payMonth=calcPayMonth(d,curPM);
-  store.records.push({id:uid(),date:d,payMonth,jobId:isManual?'__manual__':job.id,jobName:jname,startTime:s,endTime:e,breakMinutes:brk,hourlyWage:hw,workMinutes:wmin,wage,transport:trp,total:wage+trp,fuyouAmount:wage,createdAt:new Date().toISOString()});
+  store.records.push({id:uid(),date:d,payMonth,jobId:isManual?'__manual__':job.id,jobName:jname,startTime:s,endTime:e,breakMinutes:brk,hourlyWage:hw,workMinutes:wmin,wage,transport:trp,total:wage+trp,fuyouAmount:wage,countFuyou:curAddCF,createdAt:new Date().toISOString()});
   save();toast('勤務を追加したよ ✓ 💛');nav('home');
 }
 
@@ -892,7 +903,7 @@ function submitMonthly(){
   const trp=parseInt(document.getElementById('in-month-transport').value)||0;
   if(!ym){toast('年月を選択してください');return;}
   if(wage<=0){toast('給与を入力してください');return;}
-  store.records.push({id:uid(),date:`${ym}-01`,jobName:name||'月次収入',isMonthly:true,wage,transport:trp,total:wage+trp,fuyouAmount:wage,createdAt:new Date().toISOString()});
+  store.records.push({id:uid(),date:`${ym}-01`,jobName:name||'月次収入',isMonthly:true,wage,transport:trp,total:wage+trp,fuyouAmount:wage,countFuyou:curMonCF,createdAt:new Date().toISOString()});
   save();toast('月次データを追加したよ ✓ 📅');nav('home');
 }
 
@@ -1025,7 +1036,8 @@ function openEdit(id){
       <div class="fg"><label>📅 年月</label><input type="month" id="ed-ym" value="${y}-${m}"></div>
       <div class="fg"><label>🏷️ バイト名/メモ</label><input type="text" id="ed-name" value="${esc(rec.jobName||'')}"></div>
       <div class="fg"><label>💴 給与（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="ed-wage" inputmode="numeric" value="${rec.wage||0}"></div></div>
-      <div class="fg" style="margin-bottom:0"><label>🚃 交通費（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="ed-transport" inputmode="numeric" value="${rec.transport||0}"></div></div>`;
+      <div class="fg"><label>🚃 交通費（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="ed-transport" inputmode="numeric" value="${rec.transport||0}"></div></div>
+      ${editCFhtml()}`;
   } else {
     document.getElementById('edit-title').textContent='シフト記録を編集';
     const opts=store.jobs.map(j=>`<option value="${j.id}" ${j.id===rec.jobId?'selected':''}>${esc(j.name)}</option>`).join('');
@@ -1034,9 +1046,15 @@ function openEdit(id){
       <div class="fg"><label>📆 日付</label><input type="date" id="ed-date" value="${rec.date}"></div>
       <div class="fg"><label>⏱️ 勤務時間</label><div class="time-row"><input type="time" id="ed-start" value="${rec.startTime||''}"><input type="time" id="ed-end" value="${rec.endTime||''}"></div></div>
       <div class="fg"><label>☕ 休憩（分）</label><input type="number" id="ed-break" inputmode="numeric" value="${rec.breakMinutes||0}"></div>
-      <div class="fg" style="margin-bottom:0"><label>🚃 交通費（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="ed-transport" inputmode="numeric" value="${rec.transport||0}"></div></div>`;
+      <div class="fg"><label>🚃 交通費（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="ed-transport" inputmode="numeric" value="${rec.transport||0}"></div></div>
+      ${editCFhtml()}`;
   }
   document.getElementById('edit-overlay').classList.remove('hidden');
+  setEditCF(recCounted(rec));
+}
+function editCFhtml(){
+  return `<div class="fg" style="margin-bottom:0"><label>🎯 扶養カウント</label>
+    <div class="ttype-row"><button class="btn-sm" id="ed-cf-yes" onclick="setEditCF(true)">カウントする</button><button class="btn-sm" id="ed-cf-no" onclick="setEditCF(false)">対象外</button></div></div>`;
 }
 
 function saveEdit(){
@@ -1050,7 +1068,7 @@ function saveEdit(){
     const wage=parseInt(document.getElementById('ed-wage').value)||0;
     const trp=parseInt(document.getElementById('ed-transport').value)||0;
     if(!ym||wage<=0){toast('入力を確認してください');return;}
-    store.records[idx]={...rec,date:`${ym}-01`,jobName:name||'月次収入',wage,transport:trp,total:wage+trp,fuyouAmount:wage};
+    store.records[idx]={...rec,date:`${ym}-01`,jobName:name||'月次収入',wage,transport:trp,total:wage+trp,fuyouAmount:wage,countFuyou:curEditCF};
   } else {
     const jobId=document.getElementById('ed-job').value;
     const job=store.jobs.find(j=>j.id===jobId);
@@ -1064,7 +1082,7 @@ function saveEdit(){
     if(wmin<=0){toast('勤務時間を確認してください');return;}
     const hw=job?.hourlyWage||rec.hourlyWage||1000;
     const wage=Math.floor(hw*wmin/60);
-    store.records[idx]={...rec,date:d,jobId:jobId||rec.jobId,jobName:job?.name||rec.jobName,startTime:s,endTime:e,breakMinutes:brk,hourlyWage:hw,workMinutes:wmin,wage,transport:trp,total:wage+trp,fuyouAmount:wage};
+    store.records[idx]={...rec,date:d,jobId:jobId||rec.jobId,jobName:job?.name||rec.jobName,startTime:s,endTime:e,breakMinutes:brk,hourlyWage:hw,workMinutes:wmin,wage,transport:trp,total:wage+trp,fuyouAmount:wage,countFuyou:curEditCF};
   }
   save();closeEdit();renderHistory();renderHome();toast('更新したよ ✓');
 }
@@ -1087,6 +1105,28 @@ function setCF(v){
   curCF=v;
   document.getElementById('cf-yes')?.classList.toggle('on',v);
   document.getElementById('cf-no')?.classList.toggle('on',!v);
+}
+
+// 追加（シフト）フォームの扶養カウント
+let curAddCF=true;
+function setAddCF(v){
+  curAddCF=v;
+  document.getElementById('acf-yes')?.classList.toggle('on',v);
+  document.getElementById('acf-no')?.classList.toggle('on',!v);
+}
+// 追加（月次）フォームの扶養カウント
+let curMonCF=true;
+function setMonCF(v){
+  curMonCF=v;
+  document.getElementById('mcf-yes')?.classList.toggle('on',v);
+  document.getElementById('mcf-no')?.classList.toggle('on',!v);
+}
+// 編集モーダルの扶養カウント
+let curEditCF=true;
+function setEditCF(v){
+  curEditCF=v;
+  document.getElementById('ed-cf-yes')?.classList.toggle('on',v);
+  document.getElementById('ed-cf-no')?.classList.toggle('on',!v);
 }
 
 function setPM(t){
