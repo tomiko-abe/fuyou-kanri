@@ -162,6 +162,17 @@
     .cal-legend{display:flex;gap:10px;justify-content:center;margin-bottom:10px;flex-wrap:wrap}
     .leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);font-weight:700}
     .leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+    .cal-day.has{cursor:pointer}
+    .cal-day.sel{box-shadow:0 0 0 2.5px var(--p2)}
+    .cal-detail{background:var(--card);border-radius:var(--r);padding:14px 16px;box-shadow:var(--sh);border:1.5px solid var(--border);margin-bottom:10px}
+    .cal-detail-hdr{font-size:13px;font-weight:800;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+    .cd-rec{display:flex;align-items:center;padding:9px 0;border-top:1px solid var(--border)}
+    .cd-rec:first-of-type{border-top:none}
+    .cd-info{flex:1;min-width:0}
+    .cd-name{font-size:13px;font-weight:700}
+    .cd-time{font-size:11px;color:var(--muted);margin-top:2px}
+    .cd-amt{font-size:13px;font-weight:800;text-align:right;white-space:nowrap}
+    .cal-mlabel{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:4px 3px 7px}
     .cal-sum{background:var(--card);border-radius:var(--r);padding:15px 16px;box-shadow:var(--sh);border:1.5px solid var(--border)}
     .cal-sum-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0}
     .cal-sum-row+.cal-sum-row{border-top:1px solid var(--border)}
@@ -253,15 +264,15 @@
         <circle class="darc" id="darc" cx="90" cy="90" r="74" stroke="#10B981" stroke-dasharray="464.96" stroke-dashoffset="464.96" transform="rotate(-90 90 90)"/>
       </svg>
       <div class="dcenter">
-        <div class="dlabel">あと働ける</div>
+        <div class="dlabel" id="d-label">あと働ける</div>
         <div class="damount" id="d-rem">¥0</div>
         <div class="dpct" id="d-pct">0% 使用済み</div>
       </div>
     </div>
   </div>
   <div class="stats-row">
-    <div class="scard"><div class="slabel">💰 扶養カウント済み</div><div class="sval" id="s-earned">¥0</div></div>
-    <div class="scard"><div class="slabel">🎯 年間上限</div><div class="sval" id="s-limit">¥1,230,000</div></div>
+    <div class="scard"><div class="slabel" id="s-earned-label">💰 扶養カウント済み</div><div class="sval" id="s-earned">¥0</div></div>
+    <div class="scard"><div class="slabel" id="s-limit-label">🎯 年間上限</div><div class="sval" id="s-limit">¥1,230,000</div></div>
   </div>
   <div class="card">
     <div class="pace-row">
@@ -357,6 +368,8 @@
     <div class="cal-dow"><div class="cal-dow-cell">日</div><div class="cal-dow-cell">月</div><div class="cal-dow-cell">火</div><div class="cal-dow-cell">水</div><div class="cal-dow-cell">木</div><div class="cal-dow-cell">金</div><div class="cal-dow-cell">土</div></div>
     <div class="cal-days" id="cal-days"></div>
   </div>
+  <div id="cal-day-detail" class="hidden"></div>
+  <div id="cal-monthly" class="hidden"></div>
   <div class="cal-sum" id="cal-sum"></div>
 </section>
 
@@ -420,8 +433,12 @@
           <div class="ttype-row"><button class="btn-sm on" id="tt-fixed" onclick="setTT('fixed')">固定</button><button class="btn-sm" id="tt-manual" onclick="setTT('manual')">手入力</button><button class="btn-sm" id="tt-none" onclick="setTT('none')">支給なし</button></div>
           <div class="fg mt8 hidden" id="jf-fixed-fg"><label>固定交通費（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="jf-transport" inputmode="numeric" placeholder="500" min="0"></div></div>
         </div>
-        <div class="fg" style="margin-bottom:0"><label>💴 支払い月タイプ</label>
+        <div class="fg"><label>💴 支払い月タイプ</label>
           <div class="ttype-row"><button class="btn-sm on" id="pt-same" onclick="setPT('same')">当月払い</button><button class="btn-sm" id="pt-next" onclick="setPT('next')">翌月払い</button></div>
+        </div>
+        <div class="fg" style="margin-bottom:0"><label>🎯 扶養カウント</label>
+          <div class="ttype-row"><button class="btn-sm on" id="cf-yes" onclick="setCF(true)">カウントする</button><button class="btn-sm" id="cf-no" onclick="setCF(false)">対象外</button></div>
+          <div class="info-note mt8">対象外＝このバイトの収入は扶養ラインに含めません</div>
         </div>
         <button class="btn mt8" onclick="saveJob()" style="font-size:13px;padding:11px">登録する</button>
       </div>
@@ -436,9 +453,18 @@
         <button class="btn-sm" data-v="1300000" onclick="pickPreset(this)">130万</button>
       </div>
       <div class="fg mt8" style="margin-bottom:12px"><label>カスタム（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="cfg-limit" inputmode="numeric" placeholder="1230000"></div></div>
-      <div class="fg" style="margin-bottom:0"><label>対象年度</label><input type="number" id="cfg-year" inputmode="numeric" placeholder="2026" min="2020" max="2040"></div>
+      <div class="fg" style="margin-bottom:12px"><label>対象年度</label><input type="number" id="cfg-year" inputmode="numeric" placeholder="2026" min="2020" max="2040"></div>
+      <div class="fg" style="margin-bottom:0"><label>📐 判定モード</label>
+        <div class="ttype-row"><button class="btn-sm on" id="mode-annual" onclick="setMode('annual')">年間上限</button><button class="btn-sm" id="mode-avg3" onclick="setMode('avg3')">3ヶ月平均</button></div>
+        <div class="info-note mt8">3ヶ月平均＝直近3ヶ月の平均月収（交通費込み）が ¥108,333 以内かを判定（社会保険の扶養基準）</div>
+      </div>
     </div>
     <button class="btn" onclick="saveSettings()">💾 保存する</button>
+  </div>
+  <div class="card mt10">
+    <div class="stitle">📊 3ヶ月平均チェッカー</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">3ヶ月ごとの平均月収（交通費込み）が <strong>¥108,333</strong> 以内かを確認できます。超えると社会保険の扶養から外れる可能性があります。</p>
+    <div id="avg3-list"></div>
   </div>
   <div class="card mt10">
     <div class="stitle" style="color:var(--danger)">⚠️ データ管理</div>
@@ -517,7 +543,7 @@ function mascotSVG(state){
 const KEY='fuyou_v2';
 const CIRC=2*Math.PI*74;
 
-function defStore(){return{settings:{limit:1230000,year:new Date().getFullYear()},jobs:[],records:[]}}
+function defStore(){return{settings:{limit:1230000,year:new Date().getFullYear(),mode:'annual'},jobs:[],records:[]}}
 
 function loadStore(){
   try{
@@ -544,14 +570,36 @@ function save(){
 }
 
 /* ── COMPUTED ── */
+const AVG3_LIMIT=108333; // 130万 ÷ 12（3ヶ月平均の上限・交通費込み）
 function recPayMonth(r){return r.payMonth||r.date.slice(0,7);}
+// 扶養カウント額：バイトの「扶養にカウントしない」設定を動的に反映
+function recFuyouAmt(r){
+  if(!r.isMonthly && r.jobId && r.jobId!=='__manual__'){
+    const job=store.jobs.find(j=>j.id===r.jobId);
+    if(job && job.countFuyou===false) return 0;
+  }
+  if(r.countFuyou===false) return 0;
+  return r.fuyouAmount||r.amount||0;
+}
+// 月収入（交通費込み・支払い月基準）— 3ヶ月平均用
+function monthIncome(ym){return store.records.filter(r=>recPayMonth(r)===ym).reduce((s,r)=>s+(r.total||r.amount||0),0);}
+// 年内の3ヶ月移動平均ウィンドウ
+function avg3Windows(){
+  const yr=store.settings.year,res=[];
+  for(let s=1;s<=10;s++){
+    const sum=[s,s+1,s+2].reduce((a,m)=>a+monthIncome(`${yr}-${pad(m)}`),0);
+    const avg=Math.round(sum/3);
+    res.push({start:s,end:s+2,avg,ok:avg<=AVG3_LIMIT});
+  }
+  return res;
+}
 function yrRecs(){const yr=String(store.settings.year);return store.records.filter(r=>recPayMonth(r).startsWith(yr));}
-function totalFuyou(){return yrRecs().reduce((s,r)=>s+(r.fuyouAmount||r.amount||0),0)}
+function totalFuyou(){return yrRecs().reduce((s,r)=>s+recFuyouAmt(r),0)}
 function remaining(){return Math.max(0,store.settings.limit-totalFuyou())}
 function thisMonthFuyou(){
   const now=new Date();
   const pfx=`${now.getFullYear()}-${pad(now.getMonth()+1)}`;
-  return yrRecs().filter(r=>recPayMonth(r)===pfx).reduce((s,r)=>s+(r.fuyouAmount||r.amount||0),0);
+  return yrRecs().filter(r=>recPayMonth(r)===pfx).reduce((s,r)=>s+recFuyouAmt(r),0);
 }
 function remMonths(){
   const now=new Date(),yr=store.settings.year;
@@ -592,7 +640,23 @@ function renderCurrentPage(){
 }
 
 /* ── HOME ── */
+function currentAvg3(){
+  const now=new Date(),yr=store.settings.year;
+  let end=(now.getFullYear()===yr)?now.getMonth()+1:(now.getFullYear()>yr?12:1);
+  end=Math.max(1,Math.min(12,end));
+  let sum=0;
+  for(let m=end-2;m<=end;m++){if(m>=1&&m<=12) sum+=monthIncome(`${yr}-${pad(m)}`);}
+  return {avg:Math.round(sum/3),start:Math.max(1,end-2),end};
+}
+
 function renderHome(){
+  document.getElementById('yr-badge').textContent=`${store.settings.year}年 ▾`;
+  if((store.settings.mode||'annual')==='avg3') renderHomeAvg3();
+  else renderHomeAnnual();
+  renderRecent();
+}
+
+function renderHomeAnnual(){
   const earned=totalFuyou(),lim=store.settings.limit,rem=remaining();
   const ratio=Math.min(earned/lim,1),pct=Math.round(ratio*100);
   const state=pct>=100?'exceeded':pct>=90?'danger':pct>=70?'caution':'safe';
@@ -601,9 +665,12 @@ function renderHome(){
   const arc=document.getElementById('darc');
   arc.style.strokeDashoffset=CIRC*(1-ratio);
   arc.style.stroke=color;
+  document.getElementById('d-label').textContent='あと働ける';
   const dRem=document.getElementById('d-rem');
   dRem.textContent=fmt(rem);dRem.style.color=color;
   document.getElementById('d-pct').textContent=`${pct}% 使用済み`;
+  document.getElementById('s-earned-label').textContent='💰 扶養カウント済み';
+  document.getElementById('s-limit-label').textContent='🎯 年間上限';
   document.getElementById('s-earned').textContent=fmt(earned);
   document.getElementById('s-limit').textContent=fmt(lim);
 
@@ -636,12 +703,60 @@ function renderHome(){
   else if(pct>=90) a.innerHTML=`<div class="alert alert-d">⚠️ 残り ${fmt(rem)} — 上限まであとわずか！</div>`;
   else if(pct>=70) a.innerHTML=`<div class="alert alert-c">📢 残り ${fmt(rem)} — 使用率 ${pct}%。気をつけてね</div>`;
   else a.innerHTML='';
+}
 
+function renderHomeAvg3(){
+  const{avg,start,end}=currentAvg3();
+  const lim=AVG3_LIMIT;
+  const ratio=Math.min(avg/lim,1),pct=Math.round(avg/lim*100);
+  const rem=lim-avg;
+  const state=avg>=lim?'exceeded':pct>=90?'danger':pct>=80?'caution':'safe';
+  const color=pct>=100?'#EF4444':pct>=90?'#EF4444':pct>=80?'#F59E0B':'#10B981';
+
+  const arc=document.getElementById('darc');
+  arc.style.strokeDashoffset=CIRC*(1-ratio);
+  arc.style.stroke=color;
+  document.getElementById('d-label').textContent='3ヶ月平均';
+  const dRem=document.getElementById('d-rem');
+  dRem.textContent=fmt(avg);dRem.style.color=color;
+  document.getElementById('d-pct').textContent=`上限 ¥108,333 の${pct}%`;
+  document.getElementById('s-earned-label').textContent=`💰 直近平均（${start}〜${end}月）`;
+  document.getElementById('s-limit-label').textContent='🎯 月の上限';
+  document.getElementById('s-earned').textContent=fmt(avg);
+  document.getElementById('s-limit').textContent=fmt(lim);
+
+  document.getElementById('p-monthly').textContent=fmt(rem>0?rem:0);
+  document.getElementById('p-months').textContent='—';
+  const now=new Date();
+  document.getElementById('p-tmlabel').textContent=`${now.getMonth()+1}月の収入`;
+  document.getElementById('p-thismonth').textContent=fmt(monthIncome(`${store.settings.year}-${pad(now.getMonth()+1)}`));
+  document.getElementById('hourly-row').classList.add('hidden');
+
+  const wrap=document.getElementById('mascot-wrap');
+  wrap.innerHTML=mascotSVG(state);
+  wrap.className='mascot-wrap '+(state==='exceeded'?'shake':'bounce');
+  const msgs={
+    safe:[`平均 <strong>${fmt(avg)}</strong>/月だよ💛`,`上限まで月あと ${fmt(rem)} 余裕あり！`],
+    caution:[`平均 <strong>${fmt(avg)}</strong>/月😰`,`上限の${pct}%。ペースに注意！`],
+    danger:[`平均 <strong>${fmt(avg)}</strong>/月😱`,'もうすぐ¥108,333！注意！'],
+    exceeded:['3ヶ月平均が上限超え💦','社会保険の扶養から外れる可能性が！']
+  };
+  const[main,sub]=msgs[state];
+  document.getElementById('bubble-main').innerHTML=main;
+  document.getElementById('bubble-sub').textContent=sub;
+
+  const a=document.getElementById('alert-area');
+  if(avg>=lim) a.innerHTML=`<div class="alert alert-x">⚠️ 3ヶ月平均が ¥108,333 を超えています！</div>`;
+  else if(pct>=90) a.innerHTML=`<div class="alert alert-d">⚠️ 平均 ${fmt(avg)} — 上限まであとわずか！</div>`;
+  else if(pct>=80) a.innerHTML=`<div class="alert alert-c">📢 平均 ${fmt(avg)}（${pct}%）気をつけてね</div>`;
+  else a.innerHTML='';
+}
+
+function renderRecent(){
   const recs=yrRecs().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
   const el=document.getElementById('recent-list');
   if(!recs.length){el.innerHTML='<div class="no-recent">まだ記録がないよ！「追加」タブから登録してね 💛</div>';return;}
-  el.innerHTML=recs.map(r=>`<div class="rec"><div class="rdot"></div><div class="rinfo"><div class="rmemo">${esc(r.jobName||r.memo||'収入')}${r.isMonthly?'<span class="mbadge">月次</span>':''}</div><div class="rdate">${fmtDate(r.date)}${r.startTime?` ${r.startTime}–${r.endTime}`:''}</div></div><div style="display:flex;align-items:center;gap:4px"><div style="text-align:right"><div class="ramt">¥${(r.total||r.amount||0).toLocaleString()}</div><div style="font-size:10px;color:var(--muted)">扶 ¥${(r.fuyouAmount||r.amount||0).toLocaleString()}</div></div><button class="act-btn edit-btn" onclick="openEdit('${r.id}')">✏️</button><button class="act-btn del-btn" onclick="delRec('${r.id}')">×</button></div></div>`).join('');
-  document.getElementById('yr-badge').textContent=`${store.settings.year}年 ▾`;
+  el.innerHTML=recs.map(r=>`<div class="rec"><div class="rdot"></div><div class="rinfo"><div class="rmemo">${esc(r.jobName||r.memo||'収入')}${r.isMonthly?'<span class="mbadge">月次</span>':''}</div><div class="rdate">${fmtDate(r.date)}${r.startTime?` ${r.startTime}–${r.endTime}`:''}</div></div><div style="display:flex;align-items:center;gap:4px"><div style="text-align:right"><div class="ramt">¥${(r.total||r.amount||0).toLocaleString()}</div><div style="font-size:10px;color:var(--muted)">扶 ¥${recFuyouAmt(r).toLocaleString()}</div></div><button class="act-btn edit-btn" onclick="openEdit('${r.id}')">✏️</button><button class="act-btn del-btn" onclick="delRec('${r.id}')">×</button></div></div>`).join('');
 }
 
 /* ── ADD ── */
@@ -783,11 +898,13 @@ function submitMonthly(){
 
 /* ── CALENDAR ── */
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth();
+let _selDay=null;
 function renderCalendar(){
   document.getElementById('cal-month-label').textContent=`${calYear}年${calMonth+1}月`;
-  const allRecs=store.records.filter(r=>r.date.startsWith(String(store.settings.year))).sort((a,b)=>a.date.localeCompare(b.date));
+  // シフト記録のみ（月次はカレンダー外で表示）
+  const shiftRecs=store.records.filter(r=>!r.isMonthly && r.date.startsWith(String(store.settings.year)));
   const dayMap={},cumMap={};
-  allRecs.forEach(r=>{dayMap[r.date]=(dayMap[r.date]||0)+(r.fuyouAmount||r.amount||0);});
+  shiftRecs.forEach(r=>{dayMap[r.date]=(dayMap[r.date]||0)+recFuyouAmt(r);});
   let cum=0;
   Object.keys(dayMap).sort().forEach(d=>{cum+=dayMap[d];cumMap[d]=cum;});
   const lim=store.settings.limit,today=todayISO();
@@ -801,34 +918,69 @@ function renderCalendar(){
     const dfw=new Date(calYear,calMonth,day).getDay();
     let cls='cal-day';
     if(iso===today) cls+=' today';
+    if(iso===_selDay) cls+=' sel';
     if(dfw===0) cls+=' sun'; if(dfw===6) cls+=' sat';
-    let amt='';
+    let amt='',tap='';
     if(dayMap[iso]!==undefined){
       const v=dayMap[iso];
       const isPast=iso<=today;
       if(isPast){const r=cumMap[iso]/lim;cls+=r>=.9?' w-dng':r>=.7?' w-cau':' w-safe';}
       else{cls+=' w-plan';}
+      cls+=' has';tap=`onclick="showDayDetail('${iso}')"`;
       amt=`<span class="cam">${v>=10000?`${(v/10000).toFixed(1)}万`:v>=1000?`${Math.round(v/1000)}千`:`${v}円`}</span>`;
     }
-    cells+=`<div class="${cls}"><span class="cdn">${day}</span>${amt}</div>`;
+    cells+=`<div class="${cls}" ${tap}><span class="cdn">${day}</span>${amt}</div>`;
   }
   const rem2=(Math.ceil((firstDay+dim)/7)*7)-(firstDay+dim);
   for(let i=1;i<=rem2;i++) cells+=`<div class="cal-day other"><span class="cdn">${i}</span></div>`;
   document.getElementById('cal-days').innerHTML=cells;
+  // 選択中の日の詳細を再描画（月移動で消す）
+  if(_selDay && _selDay.startsWith(`${calYear}-${pad(calMonth+1)}`)) showDayDetail(_selDay,true);
+  else{_selDay=null;document.getElementById('cal-day-detail').classList.add('hidden');}
+  // 月次収入セクション（カレンダー外）
   const pfx=`${calYear}-${pad(calMonth+1)}`;
-  const mRecs=allRecs.filter(r=>r.date.startsWith(pfx));
-  const mF=mRecs.reduce((s,r)=>s+(r.fuyouAmount||r.amount||0),0);
+  const monthlyRecs=store.records.filter(r=>r.isMonthly && recPayMonth(r)===pfx);
+  const mel=document.getElementById('cal-monthly');
+  if(monthlyRecs.length){
+    mel.classList.remove('hidden');
+    mel.innerHTML=`<div class="cal-mlabel">📅 ${calMonth+1}月の月次収入</div><div class="cal-detail">`+
+      monthlyRecs.map(r=>`<div class="cd-rec"><div class="cd-info"><div class="cd-name">${esc(r.jobName||'月次収入')}</div><div class="cd-time">給与 ¥${(r.wage||0).toLocaleString()}／交通費 ¥${(r.transport||0).toLocaleString()}</div></div><div class="cd-amt">¥${(r.total||0).toLocaleString()}<br><span style="font-size:10px;color:var(--muted)">扶 ¥${recFuyouAmt(r).toLocaleString()}</span></div><button class="act-btn edit-btn" onclick="openEdit('${r.id}')">✏️</button><button class="act-btn del-btn" onclick="delRec('${r.id}')">×</button></div>`).join('')+
+      `</div>`;
+  } else {mel.classList.add('hidden');mel.innerHTML='';}
+  // 月サマリー（シフト＋月次、支払い月基準）
+  const mRecs=yrRecs().filter(r=>recPayMonth(r)===pfx);
+  const mF=mRecs.reduce((s,r)=>s+recFuyouAmt(r),0);
   const mT=mRecs.reduce((s,r)=>s+(r.total||r.amount||0),0);
-  const mD=new Set(mRecs.map(r=>r.date)).size;
+  const mD=new Set(shiftRecs.filter(r=>r.date.startsWith(pfx)).map(r=>r.date)).size;
   const yF=totalFuyou(),yP=Math.round(yF/lim*100);
   const pc=yP>=90?'#DC2626':yP>=70?'#D97706':'#059669';
   document.getElementById('cal-sum').innerHTML=`
-    <div class="cal-sum-row"><span class="cal-sum-key">📅 ${calMonth+1}月 勤務日数</span><span class="cal-sum-val">${mD}日（${mRecs.length}件）</span></div>
-    <div class="cal-sum-row"><span class="cal-sum-key">💰 ${calMonth+1}月 合計支給額</span><span class="cal-sum-val">${fmt(mT)}</span></div>
+    <div class="cal-sum-row"><span class="cal-sum-key">📅 ${calMonth+1}月 勤務日数</span><span class="cal-sum-val">${mD}日</span></div>
+    <div class="cal-sum-row"><span class="cal-sum-key">💰 ${calMonth+1}月 支払い合計</span><span class="cal-sum-val">${fmt(mT)}</span></div>
     <div class="cal-sum-row"><span class="cal-sum-key">🎯 ${calMonth+1}月 扶養カウント</span><span class="cal-sum-val" style="color:var(--p1)">${fmt(mF)}</span></div>
     <div class="cal-sum-row"><span class="cal-sum-key">📊 ${store.settings.year}年 累計</span><span class="cal-sum-val" style="color:${pc}">${fmt(yF)} (${yP}%)</span></div>`;
 }
-function calMove(d){calMonth+=d;if(calMonth<0){calMonth=11;calYear--;}if(calMonth>11){calMonth=0;calYear++;}renderCalendar();}
+
+function showDayDetail(iso,keep){
+  if(!keep && _selDay===iso){ // 同じ日を再タップで閉じる
+    _selDay=null;renderCalendar();return;
+  }
+  _selDay=iso;
+  const recs=store.records.filter(r=>!r.isMonthly && r.date===iso);
+  const el=document.getElementById('cal-day-detail');
+  if(!recs.length){el.classList.add('hidden');if(!keep)renderCalendar();return;}
+  const dt=new Date(iso+'T00:00:00');
+  const dT=recs.reduce((s,r)=>s+(r.total||0),0);
+  el.classList.remove('hidden');
+  el.innerHTML=`<div class="cal-detail"><div class="cal-detail-hdr"><span>📌 ${dt.getMonth()+1}月${dt.getDate()}日の勤務</span><span style="color:var(--p1)">${fmt(dT)}</span></div>`+
+    recs.map(r=>{
+      const tm=r.workMinutes?`${r.startTime}–${r.endTime}（${Math.floor(r.workMinutes/60)}h${pad(r.workMinutes%60)}m）`:'';
+      const pm=r.payMonth&&r.payMonth!==r.date.slice(0,7)?` <span style="color:#4F46E5">翌月払</span>`:'';
+      return `<div class="cd-rec"><div class="cd-info"><div class="cd-name">${esc(r.jobName||'勤務')}${pm}</div><div class="cd-time">${tm}　時給¥${(r.hourlyWage||0).toLocaleString()}</div></div><div class="cd-amt">¥${(r.total||0).toLocaleString()}<br><span style="font-size:10px;color:var(--muted)">扶 ¥${recFuyouAmt(r).toLocaleString()}</span></div><button class="act-btn edit-btn" onclick="openEdit('${r.id}')">✏️</button><button class="act-btn del-btn" onclick="delRec('${r.id}')">×</button></div>`;
+    }).join('')+`</div>`;
+  if(!keep) renderCalendar(); // セル選択ハイライトを反映
+}
+function calMove(d){_selDay=null;calMonth+=d;if(calMonth<0){calMonth=11;calYear--;}if(calMonth>11){calMonth=0;calYear++;}renderCalendar();}
 
 /* ── HISTORY ── */
 function renderHistory(){
@@ -840,14 +992,14 @@ function renderHistory(){
   let html=`<div class="yr-total">年間扶養カウント：<strong>${fmt(totalFuyou())}</strong></div>`;
   Object.keys(groups).sort((a,b)=>b.localeCompare(a)).forEach(k=>{
     const mo=parseInt(k.split('-')[1]);
-    const mF=groups[k].reduce((s,r)=>s+(r.fuyouAmount||r.amount||0),0);
+    const mF=groups[k].reduce((s,r)=>s+recFuyouAmt(r),0);
     const mT=groups[k].reduce((s,r)=>s+(r.total||r.amount||0),0);
     html+=`<div class="mgroup"><div class="mhdr"><span class="mlabel">${mo}月</span><span class="mtotal">${fmt(mT)}（扶 ${fmt(mF)}）</span></div>`;
     groups[k].forEach(r=>{
       const sub=r.workMinutes?`${r.startTime}–${r.endTime} ${Math.floor(r.workMinutes/60)}h${r.workMinutes%60}m`:fmtDate(r.date);
       const isNextMonth=r.payMonth&&r.payMonth!==r.date.slice(0,7);
       const badge=r.isMonthly?'<span class="mbadge">月次</span>':isNextMonth?'<span class="mbadge" style="background:#E0E7FF;color:#3730A3">翌月払</span>':'';
-      html+=`<div class="rec"><div class="rdot"></div><div class="rinfo"><div class="rmemo">${esc(r.jobName||r.memo||'収入')}${badge}</div><div class="rdate">${fmtDate(r.date)} ${sub}</div></div><div style="display:flex;align-items:center"><div><div class="ramt">¥${(r.total||r.amount||0).toLocaleString()}</div><div style="font-size:10px;color:var(--muted);text-align:right">扶 ¥${(r.fuyouAmount||r.amount||0).toLocaleString()}</div></div><button class="act-btn edit-btn" onclick="openEdit('${r.id}')">✏️</button><button class="act-btn del-btn" onclick="delRec('${r.id}')">×</button></div></div>`;
+      html+=`<div class="rec"><div class="rdot"></div><div class="rinfo"><div class="rmemo">${esc(r.jobName||r.memo||'収入')}${badge}</div><div class="rdate">${fmtDate(r.date)} ${sub}</div></div><div style="display:flex;align-items:center"><div><div class="ramt">¥${(r.total||r.amount||0).toLocaleString()}</div><div style="font-size:10px;color:var(--muted);text-align:right">扶 ¥${recFuyouAmt(r).toLocaleString()}</div></div><button class="act-btn edit-btn" onclick="openEdit('${r.id}')">✏️</button><button class="act-btn del-btn" onclick="delRec('${r.id}')">×</button></div></div>`;
     });
     html+='</div>';
   });
@@ -924,10 +1076,17 @@ function overlayClick(e){if(e.target.id==='edit-overlay') closeEdit();}
 let curTT='fixed';
 let curPT='same'; // バイト登録フォームの支払い月タイプ
 let curPM='same'; // 追加フォームの支払い月タイプ
+let curCF=true;   // バイト登録フォームの扶養カウント
 
 function setPT(t){
   curPT=t;
   ['same','next'].forEach(v=>document.getElementById('pt-'+v)?.classList.toggle('on',v===t));
+}
+
+function setCF(v){
+  curCF=v;
+  document.getElementById('cf-yes')?.classList.toggle('on',v);
+  document.getElementById('cf-no')?.classList.toggle('on',!v);
 }
 
 function setPM(t){
@@ -961,13 +1120,40 @@ function calcPayMonth(dateStr, pmType){
   }
   return dateStr.slice(0,7);
 }
+let curMode='annual';
 function renderSettings(){
   const{limit,year}=store.settings;
   document.getElementById('cfg-limit').value=limit;
   document.getElementById('cfg-year').value=year;
   document.querySelectorAll('#preset-row .btn-sm').forEach(b=>b.classList.toggle('on',parseInt(b.dataset.v)===limit));
+  setMode(store.settings.mode||'annual');
+  renderAvg3();
   renderJobList();
   updateSyncUI();
+}
+
+function setMode(m){
+  curMode=m;
+  document.getElementById('mode-annual')?.classList.toggle('on',m==='annual');
+  document.getElementById('mode-avg3')?.classList.toggle('on',m==='avg3');
+}
+
+const MONTH_J=['','1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+function renderAvg3(){
+  const el=document.getElementById('avg3-list');
+  if(!el) return;
+  const wins=avg3Windows();
+  const now=new Date();
+  const curEnd=(now.getFullYear()===store.settings.year)?now.getMonth()+1:12;
+  el.innerHTML=wins.map(w=>{
+    const isCur=w.end===curEnd||(w.start<=curEnd&&w.end>=curEnd);
+    const col=w.ok?'#059669':'#DC2626';
+    const bg=w.ok?'#D1FAE5':'#FEE2E2';
+    const icon=w.ok?'✓':'⚠️';
+    return `<div class="cal-sum-row" style="${isCur?`background:${bg};border-radius:10px;padding:8px 10px;`:''}">
+      <span class="cal-sum-key">${MONTH_J[w.start]}〜${MONTH_J[w.end]}${isCur?' <span style="font-size:10px;color:var(--p1)">●今</span>':''}</span>
+      <span class="cal-sum-val" style="color:${col}">${icon} ${fmt(w.avg)}</span></div>`;
+  }).join('');
 }
 
 function renderJobList(){
@@ -976,7 +1162,7 @@ function renderJobList(){
   const ttL={fixed:'固定交通費',manual:'手入力',none:'交通費なし'};
   el.innerHTML=store.jobs.map(j=>`
     <div class="job-item" id="ji-${j.id}">
-      <div class="job-info"><div class="job-name">${esc(j.name)}</div><div class="job-meta">¥${j.hourlyWage.toLocaleString()}/時　${ttL[j.transportType]||''}${j.transportType==='fixed'?` ¥${(j.transportFixed||0).toLocaleString()}`:''}</div></div>
+      <div class="job-info"><div class="job-name">${esc(j.name)}${j.countFuyou===false?'<span class="mbadge" style="background:#FEE2E2;color:#991B1B">扶養対象外</span>':''}</div><div class="job-meta">¥${j.hourlyWage.toLocaleString()}/時　${ttL[j.transportType]||''}${j.transportType==='fixed'?` ¥${(j.transportFixed||0).toLocaleString()}`:''}${j.payType==='next'?'　翌月払い':''}</div></div>
       <button class="act-btn edit-btn" onclick="openJobEdit('${j.id}')">✏️</button>
       <button class="act-btn del-btn" onclick="delJob('${j.id}')">×</button>
     </div>
@@ -995,6 +1181,12 @@ function renderJobList(){
         <div class="ttype-row">
           <button class="btn-sm ${(j.payType||'same')==='same'?'on':''}" id="jept-same-${j.id}" onclick="setJEPT('${j.id}','same')">当月払い</button>
           <button class="btn-sm ${j.payType==='next'?'on':''}" id="jept-next-${j.id}" onclick="setJEPT('${j.id}','next')">翌月払い</button>
+        </div>
+      </div>
+      <div class="fg" style="margin-bottom:8px"><label>扶養カウント</label>
+        <div class="ttype-row">
+          <button class="btn-sm ${j.countFuyou!==false?'on':''}" id="jecf-yes-${j.id}" onclick="setJECF('${j.id}',true)">カウントする</button>
+          <button class="btn-sm ${j.countFuyou===false?'on':''}" id="jecf-no-${j.id}" onclick="setJECF('${j.id}',false)">対象外</button>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
@@ -1025,10 +1217,15 @@ function setJETT(id,t){
   });
   document.getElementById(`je-fixed-fg-${id}`)?.classList.toggle('hidden',t!=='fixed');
 }
-let _jeEditPT={};
+let _jeEditPT={},_jeEditCF={};
 function setJEPT(id,t){
   _jeEditPT[id]=t;
   ['same','next'].forEach(v=>{document.getElementById(`jept-${v}-${id}`)?.classList.toggle('on',v===t);});
+}
+function setJECF(id,v){
+  _jeEditCF[id]=v;
+  document.getElementById(`jecf-yes-${id}`)?.classList.toggle('on',v);
+  document.getElementById(`jecf-no-${id}`)?.classList.toggle('on',!v);
 }
 function saveJobEdit(id){
   const idx=store.jobs.findIndex(j=>j.id===id);
@@ -1038,17 +1235,18 @@ function saveJobEdit(id){
   const tt=_jeEditTT[id]||store.jobs[idx].transportType;
   const tf=parseInt(document.getElementById(`je-transport-${id}`)?.value)||0;
   const pt=_jeEditPT[id]||store.jobs[idx].payType||'same';
+  const cf=_jeEditCF[id]!==undefined?_jeEditCF[id]:(store.jobs[idx].countFuyou!==false);
   if(!name){toast('バイト名を入力してください');return;}
   if(!wage){toast('時給を入力してください');return;}
-  store.jobs[idx]={...store.jobs[idx],name,hourlyWage:wage,transportType:tt,transportFixed:tt==='fixed'?tf:0,payType:pt};
-  save();renderJobList();refreshJobDropdown();toast(`「${name}」を更新したよ ✓`);
+  store.jobs[idx]={...store.jobs[idx],name,hourlyWage:wage,transportType:tt,transportFixed:tt==='fixed'?tf:0,payType:pt,countFuyou:cf};
+  save();renderJobList();refreshJobDropdown();renderHome();toast(`「${name}」を更新したよ ✓`);
 }
 
 function toggleJobForm(){
   const el=document.getElementById('job-form');
   const showing=!el.classList.contains('hidden');
   el.classList.toggle('hidden',showing);
-  if(!showing){['jf-name','jf-wage','jf-transport'].forEach(id=>document.getElementById(id).value='');setTT('fixed');setPT('same');}
+  if(!showing){['jf-name','jf-wage','jf-transport'].forEach(id=>document.getElementById(id).value='');setTT('fixed');setPT('same');setCF(true);}
 }
 
 function setTT(t){
@@ -1063,7 +1261,7 @@ function saveJob(){
   const tfixed=parseInt(document.getElementById('jf-transport').value)||0;
   if(!name){toast('バイト名を入力してください');return;}
   if(!wage||wage<1){toast('時給を入力してください');return;}
-  store.jobs.push({id:uid(),name,hourlyWage:wage,transportType:curTT,transportFixed:curTT==='fixed'?tfixed:0,payType:curPT});
+  store.jobs.push({id:uid(),name,hourlyWage:wage,transportType:curTT,transportFixed:curTT==='fixed'?tfixed:0,payType:curPT,countFuyou:curCF});
   save();toggleJobForm();renderJobList();
   // すぐにAddページのドロップダウンも更新
   if(document.getElementById('shift-form-inner')) refreshJobDropdown();
@@ -1089,7 +1287,7 @@ function saveSettings(){
   const yr=parseInt(document.getElementById('cfg-year').value);
   if(!lim||lim<1){toast('上限金額を入力してください');return;}
   if(!yr||yr<2000){toast('年度を正しく入力してください');return;}
-  store.settings={limit:lim,year:yr};
+  store.settings={...store.settings,limit:lim,year:yr,mode:curMode};
   save();toast('設定を保存したよ ✓ 💛');nav('home');
 }
 
@@ -1265,8 +1463,8 @@ function updateAuthUI(){updateSyncUI();}
 /* ── DATA ── */
 function exportCSV(){
   const recs=yrRecs().sort((a,b)=>a.date.localeCompare(b.date));
-  const rows=['日付,バイト名,種別,開始,終了,休憩(分),勤務時間(分),時給,給与,交通費,合計,扶養カウント',
-    ...recs.map(r=>`${r.date},"${(r.jobName||'').replace(/"/g,'""')}",${r.isMonthly?'月次':'シフト'},${r.startTime||''},${r.endTime||''},${r.breakMinutes||0},${r.workMinutes||0},${r.hourlyWage||0},${r.wage||r.amount||0},${r.transport||0},${r.total||r.amount||0},${r.fuyouAmount||r.amount||0}`)
+  const rows=['日付,支払い月,バイト名,種別,開始,終了,休憩(分),勤務時間(分),時給,給与,交通費,合計,扶養カウント',
+    ...recs.map(r=>`${r.date},${recPayMonth(r)},"${(r.jobName||'').replace(/"/g,'""')}",${r.isMonthly?'月次':'シフト'},${r.startTime||''},${r.endTime||''},${r.breakMinutes||0},${r.workMinutes||0},${r.hourlyWage||0},${r.wage||r.amount||0},${r.transport||0},${r.total||r.amount||0},${recFuyouAmt(r)}`)
   ].join('\n');
   const url=URL.createObjectURL(new Blob(['﻿'+rows],{type:'text/csv;charset=utf-8'}));
   Object.assign(document.createElement('a'),{href:url,download:`扶養収入_${store.settings.year}.csv`}).click();
