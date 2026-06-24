@@ -390,11 +390,18 @@
     <!-- クラウド同期 -->
     <div class="ssec">
       <div class="stitle">☁️ クラウド同期（ログイン不要）</div>
-      <!-- ① Firebase未設定 -->
-      <div id="sync-noconfig">
-        <div class="info-note" style="margin-bottom:12px">💡 <strong>ログイン不要！</strong><br>「同期コード」を全端末で共有するだけで自動同期できます。<br><br>まず Firebase（無料）の設定JSONを貼り付けてください。<br><a href="https://console.firebase.google.com" target="_blank" style="color:var(--p1)">Firebase Console →</a></div>
-        <div class="fg" style="margin-bottom:10px"><label>Firebase設定（JSON）</label><textarea id="fb-config-input" placeholder='{"apiKey":"...","projectId":"...","appId":"..."}'></textarea></div>
-        <button class="btn-ghost" onclick="setupSync()">💾 設定して同期開始</button>
+      <!-- ① 未接続：コードだけで同期 -->
+      <div id="sync-setup">
+        <div class="info-note" style="margin-bottom:12px">💡 <strong>同期コードを入れるだけ！</strong><br>他の端末で表示された同期コードを入力すると、すぐに同じデータが見られます。</div>
+        <div class="fg" style="margin-bottom:8px"><label>🔑 同期コードを入力</label><input type="text" id="sync-join-input" placeholder="例：abc12xyz34" maxlength="20" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" style="letter-spacing:2px"></div>
+        <button class="btn" onclick="syncWithCode(document.getElementById('sync-join-input').value)">🔗 このコードで同期する</button>
+        <div style="text-align:center;font-size:11px;color:var(--muted);margin:12px 0 10px">― はじめての端末はこちら ―</div>
+        <button class="btn-ghost" onclick="createNewCode()">✨ 新しい同期を始める（コード発行）</button>
+        <details style="margin-top:14px">
+          <summary style="font-size:11px;color:var(--muted);cursor:pointer">⚙️ 詳細設定（自分のFirebaseを使う場合）</summary>
+          <div class="fg" style="margin:10px 0"><label>Firebase設定（JSON）</label><textarea id="fb-config-input" placeholder='{"apiKey":"...","projectId":"...","appId":"..."}'></textarea></div>
+          <button class="btn-ghost" onclick="setupSync()">💾 この設定を保存</button>
+        </details>
       </div>
       <!-- ② 同期中 -->
       <div id="sync-active" class="hidden">
@@ -1335,8 +1342,17 @@ function saveSettings(){
 let _fbDB=null,_fbUnsub=null,_syncCode=null;
 const SYNC_KEY='fuyou_sync_code';
 
+// アプリ標準のFirebase設定（公開してOKなクライアントID。秘密ではない）
+const DEFAULT_FB_CONFIG={
+  apiKey:"AIzaSyAjLYXZXrDdnl7XZx5-eFBKiOZiq4NaFQE",
+  authDomain:"fuyou-21d13.firebaseapp.com",
+  projectId:"fuyou-21d13",
+  storageBucket:"fuyou-21d13.firebasestorage.app",
+  messagingSenderId:"332422308031",
+  appId:"1:332422308031:web:7975cdeb2d59cc160ea60a"
+};
+
 function genSyncCode(){
-  // 10文字のランダム英数字コード
   return (Math.random().toString(36).slice(2,7)+Math.random().toString(36).slice(2,7)).slice(0,10);
 }
 
@@ -1349,33 +1365,65 @@ async function loadFbScripts(){
 }
 
 function parseFirebaseConfig(str){
-  // JSON形式（ダブルクォートあり）もJS形式（キーにクォートなし）も両方対応
   try{return JSON.parse(str);}catch(e){}
   try{
-    // キーにダブルクォートを補完してJSONに変換
     const json=str.replace(/([{,]\s*)([a-zA-Z_]\w*)(\s*:)/g,'$1"$2"$3');
     return JSON.parse(json);
   }catch(e){}
   return null;
 }
 
-async function setupSync(){
-  const cfg=document.getElementById('fb-config-input').value.trim();
-  if(!cfg){toast('Firebase設定を入力してください');return;}
-  const parsed=parseFirebaseConfig(cfg);
-  if(!parsed){toast('設定の形式が正しくありません');return;}
-  toast('Firebase読み込み中...');
+// 有効なFirebase設定：保存済みのカスタム設定があればそれ、なければ標準設定
+function effectiveConfig(){
+  const saved=localStorage.getItem('fuyou_fb_config');
+  if(saved){const p=parseFirebaseConfig(saved);if(p) return p;}
+  return DEFAULT_FB_CONFIG;
+}
+
+// Firebase初期化（一度だけ）
+async function initFirebase(){
+  if(_fbDB) return _fbDB;
+  await loadFbScripts();
+  if(!firebase.apps.length) firebase.initializeApp(effectiveConfig());
+  _fbDB=firebase.firestore();
+  return _fbDB;
+}
+
+// 同期コードを入力してすぐ同期（新端末はこれだけでOK）
+async function syncWithCode(code){
+  code=(code||'').trim().toLowerCase().replace(/\s/g,'');
+  if(code.length<4){toast('4文字以上のコードを入力してね');return;}
+  toast('接続中...');
   try{
-    await loadFbScripts();
-    if(!firebase.apps.length) firebase.initializeApp(parsed);
-    _fbDB=firebase.firestore();
-    localStorage.setItem('fuyou_fb_config',cfg);
-    // 既存コードがあればそれを使う、なければ新規生成
+    await initFirebase();
+    _syncCode=code;
+    localStorage.setItem(SYNC_KEY,code);
+    const ei=document.getElementById('sync-enter');if(ei)ei.classList.add('hidden');
+    startSync();
+    updateSyncUI();
+  }catch(e){toast('接続エラー: '+e.message);}
+}
+
+// 新しい同期コードを発行（はじめての端末用）
+async function createNewCode(){
+  toast('作成中...');
+  try{
+    await initFirebase();
     _syncCode=localStorage.getItem(SYNC_KEY)||genSyncCode();
     localStorage.setItem(SYNC_KEY,_syncCode);
     startSync();
     updateSyncUI();
   }catch(e){toast('エラー: '+e.message);}
+}
+
+// 詳細設定：カスタムFirebase設定を保存
+async function setupSync(){
+  const cfg=document.getElementById('fb-config-input').value.trim();
+  if(!cfg){toast('Firebase設定を入力してください');return;}
+  const parsed=parseFirebaseConfig(cfg);
+  if(!parsed){toast('設定の形式が正しくありません');return;}
+  localStorage.setItem('fuyou_fb_config',cfg);
+  toast('設定を保存したよ。コードを入力して同期してね ✓');
 }
 
 function startSync(){
@@ -1431,15 +1479,11 @@ async function manualPull(){
 
 function copySetupURL(){
   if(!_syncCode){toast('まず同期を設定してください');return;}
-  const cfg=localStorage.getItem('fuyou_fb_config')||'';
-  if(!cfg){toast('Firebase設定が見つかりません');return;}
-  try{
-    const data=btoa(unescape(encodeURIComponent(JSON.stringify({c:cfg,s:_syncCode}))));
-    const url=`${location.origin}${location.pathname}#x=${data}`;
-    const fallback=()=>{const i=document.createElement('input');i.value=url;document.body.appendChild(i);i.select();document.execCommand('copy');document.body.removeChild(i);toast('同期URLをコピーしたよ！他の端末でこのURLを開いてね 🔗');};
-    if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>toast('同期URLをコピーしたよ！他の端末でこのURLを開いてね 🔗')).catch(fallback);}
-    else fallback();
-  }catch(e){toast('URLの生成に失敗しました');}
+  const url=`${location.origin}${location.pathname}#code=${encodeURIComponent(_syncCode)}`;
+  const msg='同期URLをコピーしたよ！他の端末でこのURLを開くだけで同期されるよ 🔗';
+  const fallback=()=>{const i=document.createElement('input');i.value=url;document.body.appendChild(i);i.select();document.execCommand('copy');document.body.removeChild(i);toast(msg);};
+  if(navigator.clipboard){navigator.clipboard.writeText(url).then(()=>toast(msg)).catch(fallback);}
+  else fallback();
 }
 
 function copySyncCode(){
@@ -1461,38 +1505,31 @@ function applyNewCode(){
   const code=document.getElementById('sync-code-input').value.trim().toLowerCase().replace(/\s/g,'');
   if(code.length<4){toast('4文字以上のコードを入力してください');return;}
   if(!confirm(`同期コードを「${code}」に切り替えますか？\nそのコードのデータで上書きされます。`)) return;
-  _syncCode=code;
-  localStorage.setItem(SYNC_KEY,code);
-  cancelCodeInput();
-  startSync();
-  updateSyncUI();
-  toast('コードを切り替えたよ ✓');
+  syncWithCode(code);
 }
 
 function disconnectSync(){
   if(!confirm('同期を解除しますか？データはこの端末に残ります。')) return;
   if(_fbUnsub){_fbUnsub();_fbUnsub=null;}
   _fbDB=null;_syncCode=null;
-  localStorage.removeItem('fuyou_fb_config');
   localStorage.removeItem(SYNC_KEY);
   updateSyncUI();
   toast('同期を解除したよ');
 }
 
 function updateSyncUI(){
-  const noConf=document.getElementById('sync-noconfig');
+  const setup=document.getElementById('sync-setup');
   const active=document.getElementById('sync-active');
   const enter=document.getElementById('sync-enter');
-  if(!noConf||!active) return;
+  if(!setup||!active) return;
   const on=!!(_fbDB&&_syncCode);
-  noConf.classList.toggle('hidden',on);
+  setup.classList.toggle('hidden',on);
   active.classList.toggle('hidden',!on);
   if(enter) enter.classList.add('hidden');
   if(on){
     const d=document.getElementById('sync-code-display');
     if(d) d.textContent=_syncCode;
   }
-  // Firebase config textareaを復元
   const saved=localStorage.getItem('fuyou_fb_config');
   if(saved){const inp=document.getElementById('fb-config-input');if(inp&&!inp.value)inp.value=saved;}
 }
@@ -1537,9 +1574,13 @@ function toast(msg){
 
 /* ── INIT ── */
 document.addEventListener('DOMContentLoaded',async()=>{
-  // 同期URLからの自動設定（#x=...）
+  // 同期URLからの自動設定
   const hash=location.hash;
-  if(hash.startsWith('#x=')){
+  if(hash.startsWith('#code=')){
+    localStorage.setItem(SYNC_KEY,decodeURIComponent(hash.slice(6)).trim().toLowerCase());
+    history.replaceState(null,'',location.pathname);
+    toast('同期コードを読み込んだよ ✓');
+  } else if(hash.startsWith('#x=')){ // 旧URL互換
     try{
       const data=JSON.parse(decodeURIComponent(escape(atob(hash.slice(3)))));
       if(data.c) localStorage.setItem('fuyou_fb_config',data.c);
@@ -1549,14 +1590,11 @@ document.addEventListener('DOMContentLoaded',async()=>{
     }catch(e){console.warn('setup URL parse failed',e);}
   }
   renderHome();
-  // Firebase + 同期コードを自動復元
-  const savedCfg=localStorage.getItem('fuyou_fb_config');
+  // 同期コードがあれば自動で接続（埋め込み設定を使うのでコードだけでOK）
   const savedCode=localStorage.getItem(SYNC_KEY);
-  if(savedCfg&&savedCode){
+  if(savedCode){
     try{
-      await loadFbScripts();
-      if(!firebase.apps.length) firebase.initializeApp(parseFirebaseConfig(savedCfg));
-      _fbDB=firebase.firestore();
+      await initFirebase();
       _syncCode=savedCode;
       startSync();
     }catch(e){console.warn('Firebase restore failed',e);}
