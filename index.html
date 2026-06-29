@@ -334,7 +334,11 @@
   </div>
   <div id="monthly-form-area" class="hidden">
     <div class="card">
-      <div class="fg"><label>📅 年月</label><input type="month" id="in-month-ym"></div>
+      <div class="fg"><label>📅 勤務した年月</label><input type="month" id="in-month-ym" oninput="updateMonPayNote()"></div>
+      <div class="fg"><label>💴 支払い月</label>
+        <div class="ttype-row"><button class="btn-sm on" id="mpm-same" onclick="setMonPM('same')">当月払い</button><button class="btn-sm" id="mpm-next" onclick="setMonPM('next')">翌月払い</button></div>
+        <div class="info-note mt8" id="mon-pay-note" style="display:none"></div>
+      </div>
       <div class="fg"><label>🏷️ バイト名 / メモ（任意）</label><input type="text" id="in-month-name" placeholder="例：〇〇スーパー 1月分" maxlength="30"></div>
       <div class="fg"><label>💴 給与合計（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="in-month-wage" inputmode="numeric" placeholder="0" min="0" oninput="calcMonthlyPreview()"></div></div>
       <div class="fg"><label>🚃 交通費合計（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="in-month-transport" inputmode="numeric" placeholder="0" min="0" oninput="calcMonthlyPreview()"></div><div class="info-note">💡 交通費は扶養カウントに含まれません</div></div>
@@ -799,7 +803,7 @@ function renderAdd(){
   document.getElementById('in-month-wage').value='';
   document.getElementById('in-month-transport').value='';
   document.getElementById('monthly-preview-card').classList.add('hidden');
-  setAddCF(true);setMonCF(true);
+  setAddCF(true);setMonCF(true);setMonPM('same');
 }
 
 function refreshJobDropdown(){
@@ -910,7 +914,8 @@ function submitMonthly(){
   const trp=parseInt(document.getElementById('in-month-transport').value)||0;
   if(!ym){toast('年月を選択してください');return;}
   if(wage<=0){toast('給与を入力してください');return;}
-  store.records.push({id:uid(),date:`${ym}-01`,jobName:name||'月次収入',isMonthly:true,wage,transport:trp,total:wage+trp,fuyouAmount:wage,countFuyou:curMonCF,createdAt:new Date().toISOString()});
+  const payMonth=calcPayMonth(`${ym}-01`,curMonPM);
+  store.records.push({id:uid(),date:`${ym}-01`,payMonth,jobName:name||'月次収入',isMonthly:true,wage,transport:trp,total:wage+trp,fuyouAmount:wage,countFuyou:curMonCF,createdAt:new Date().toISOString()});
   save();toast('月次データを追加したよ ✓ 📅');nav('home');
 }
 
@@ -1040,7 +1045,9 @@ function openEdit(id){
     document.getElementById('edit-title').textContent='月次記録を編集';
     const[y,m]=rec.date.split('-');
     body.innerHTML=`
-      <div class="fg"><label>📅 年月</label><input type="month" id="ed-ym" value="${y}-${m}"></div>
+      <div class="fg"><label>📅 勤務した年月</label><input type="month" id="ed-ym" value="${y}-${m}"></div>
+      <div class="fg"><label>💴 支払い月</label>
+        <div class="ttype-row"><button class="btn-sm" id="ed-pm-same" onclick="setEditPM('same')">当月払い</button><button class="btn-sm" id="ed-pm-next" onclick="setEditPM('next')">翌月払い</button></div></div>
       <div class="fg"><label>🏷️ バイト名/メモ</label><input type="text" id="ed-name" value="${esc(rec.jobName||'')}"></div>
       <div class="fg"><label>💴 給与（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="ed-wage" inputmode="numeric" value="${rec.wage||0}"></div></div>
       <div class="fg"><label>🚃 交通費（円）</label><div class="amtwrap"><span class="ayen">¥</span><input type="number" id="ed-transport" inputmode="numeric" value="${rec.transport||0}"></div></div>
@@ -1058,6 +1065,7 @@ function openEdit(id){
   }
   document.getElementById('edit-overlay').classList.remove('hidden');
   setEditCF(recCounted(rec));
+  if(rec.isMonthly) setEditPM(rec.payMonth && rec.payMonth!==rec.date.slice(0,7) ? 'next' : 'same');
 }
 function editCFhtml(){
   return `<div class="fg" style="margin-bottom:0"><label>🎯 扶養カウント</label>
@@ -1075,7 +1083,8 @@ function saveEdit(){
     const wage=parseInt(document.getElementById('ed-wage').value)||0;
     const trp=parseInt(document.getElementById('ed-transport').value)||0;
     if(!ym||wage<=0){toast('入力を確認してください');return;}
-    store.records[idx]={...rec,date:`${ym}-01`,jobName:name||'月次収入',wage,transport:trp,total:wage+trp,fuyouAmount:wage,countFuyou:curEditCF};
+    const payMonth=calcPayMonth(`${ym}-01`,curEditPM);
+    store.records[idx]={...rec,date:`${ym}-01`,payMonth,jobName:name||'月次収入',wage,transport:trp,total:wage+trp,fuyouAmount:wage,countFuyou:curEditCF};
   } else {
     const jobId=document.getElementById('ed-job').value;
     const job=store.jobs.find(j=>j.id===jobId);
@@ -1128,12 +1137,35 @@ function setMonCF(v){
   document.getElementById('mcf-yes')?.classList.toggle('on',v);
   document.getElementById('mcf-no')?.classList.toggle('on',!v);
 }
+// 追加（月次）フォームの支払い月タイプ
+let curMonPM='same';
+function setMonPM(t){
+  curMonPM=t;
+  ['same','next'].forEach(v=>document.getElementById('mpm-'+v)?.classList.toggle('on',v===t));
+  updateMonPayNote();
+}
+function updateMonPayNote(){
+  const ym=document.getElementById('in-month-ym')?.value;
+  const note=document.getElementById('mon-pay-note');
+  if(!note) return;
+  if(!ym){note.style.display='none';return;}
+  const pm=calcPayMonth(`${ym}-01`,curMonPM);
+  const[y,m]=pm.split('-');
+  note.textContent=`📅 ${y}年${parseInt(m)}月の収入として計算（${curMonPM==='next'?'翌月払い':'当月払い'}）`;
+  note.style.display='block';
+}
 // 編集モーダルの扶養カウント
 let curEditCF=true;
 function setEditCF(v){
   curEditCF=v;
   document.getElementById('ed-cf-yes')?.classList.toggle('on',v);
   document.getElementById('ed-cf-no')?.classList.toggle('on',!v);
+}
+// 編集モーダルの支払い月タイプ（月次用）
+let curEditPM='same';
+function setEditPM(t){
+  curEditPM=t;
+  ['same','next'].forEach(v=>document.getElementById('ed-pm-'+v)?.classList.toggle('on',v===t));
 }
 
 function setPM(t){
