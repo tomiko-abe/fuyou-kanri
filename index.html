@@ -1418,7 +1418,24 @@ async function initFirebase(){
   await loadFbScripts();
   if(!firebase.apps.length) firebase.initializeApp(effectiveConfig());
   _fbDB=firebase.firestore();
+  // iOSのホーム画面アプリ/アプリ内ブラウザ対策：通信が失敗しないようlong-pollingを自動検出
+  try{_fbDB.settings({experimentalAutoDetectLongPolling:true,merge:true});}catch(e){}
   return _fbDB;
+}
+
+// クラウドから1回だけ取得して反映（取得できたらtrue）
+async function pullOnce(){
+  const snap=await _fbDB.collection('sync').doc(_syncCode).get();
+  if(snap.exists){
+    const d=snap.data();
+    if(d&&Array.isArray(d.records)){
+      store={settings:d.settings||store.settings,jobs:d.jobs||[],records:d.records};
+      localStorage.setItem(KEY,JSON.stringify(store));
+      renderCurrentPage();
+      return true;
+    }
+  }
+  return false;
 }
 
 // 同期コードを入力してすぐ同期（新端末はこれだけでOK）
@@ -1431,9 +1448,13 @@ async function syncWithCode(code){
     _syncCode=code;
     localStorage.setItem(SYNC_KEY,code);
     const ei=document.getElementById('sync-enter');if(ei)ei.classList.add('hidden');
+    // まず即座にデータを取得（onSnapshot任せにしない＝iOSでも確実）
+    const pulled=await pullOnce();
+    if(!pulled) await pushToCloud(); // クラウドが空ならこの端末のデータをアップロード
     startSync();
     updateSyncUI();
-  }catch(e){toast('接続エラー: '+e.message);}
+    toast(pulled?'☁️ 同期しました（データを取得）':'☁️ 同期開始（このデータを保存）');
+  }catch(e){toast('接続エラー: '+(e.message||e));}
 }
 
 // 新しい同期コードを発行（はじめての端末用）
@@ -1443,9 +1464,12 @@ async function createNewCode(){
     await initFirebase();
     _syncCode=localStorage.getItem(SYNC_KEY)||genSyncCode();
     localStorage.setItem(SYNC_KEY,_syncCode);
+    const pulled=await pullOnce();
+    if(!pulled) await pushToCloud();
     startSync();
     updateSyncUI();
-  }catch(e){toast('エラー: '+e.message);}
+    toast('☁️ 同期を開始しました');
+  }catch(e){toast('エラー: '+(e.message||e));}
 }
 
 // 詳細設定：カスタムFirebase設定を保存
@@ -1474,7 +1498,6 @@ function startSync(){
   },{error:e=>console.warn('sync error',e)});
   const el=document.getElementById('sync-status');
   if(el){el.textContent='同期中';el.className='sync-status';}
-  toast('☁️ クラウドと同期しました');
 }
 
 async function pushToCloud(){
@@ -1628,7 +1651,9 @@ document.addEventListener('DOMContentLoaded',async()=>{
     try{
       await initFirebase();
       _syncCode=savedCode;
+      await pullOnce();   // 起動時に最新を取得（ホーム画面アプリでも確実に反映）
       startSync();
+      updateSyncUI();
     }catch(e){console.warn('Firebase restore failed',e);}
   }
 });
